@@ -762,7 +762,7 @@ body[data-view="table"]:not(.reading) #graph-pane { flex: 1; border-right: 0; }
 body[data-view="table"]:not(.reading) #detail { display: none; }
 body:not([data-view="graph"]) #graph, body[data-view="table"] #legend { display: none; }
 /* In the tree the colour key sits under the list instead of floating over it */
-body[data-view="tree"] #graph-pane { display: flex; flex-direction: column; }
+body[data-view="tree"]:not(.reading) #graph-pane { display: flex; flex-direction: column; }
 body[data-view="tree"] #tree { position: static; flex: 1; min-height: 0; }
 body[data-view="tree"] #legend {
   position: static;

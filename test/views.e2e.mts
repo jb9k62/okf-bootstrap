@@ -262,6 +262,61 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.click('[data-view=graph]');
   });
 
+  view('reading view hides the list or graph, shows the concept, and restores each view', async () => {
+    const ids: string[] = await page.evaluate('window.__OKF_VIEW__.ids');
+    await page.evaluate((id) => window.__OKF_VIEW__.show(id), ids[0]!);
+    const title = await page.textContent('#detail-title');
+    assert.ok(title);
+    const paneVisible = () => page.isVisible('#graph-pane');
+    const detailBox = async () => (await page.locator('#detail').boundingBox())!;
+
+    for (const name of ['graph', 'tree', 'table']) {
+      await page.click(`#view-switch [data-view=${name}]`);
+      const normal = await detailBox().catch(() => null);
+      await page.click('#reading-toggle');
+      assert.equal(await page.getAttribute('#reading-toggle', 'aria-pressed'), 'true', name);
+      assert.equal(await paneVisible(), false, `${name}: the pane is hidden while reading`);
+      assert.equal(await page.isVisible('#detail'), true, `${name}: the concept is shown`);
+      assert.equal(await page.textContent('#detail-title'), title, name);
+      const reading = await detailBox();
+      assert.ok(reading.width > 900, `${name}: the reading pane takes the window (${reading.width}px)`);
+      if (normal) assert.ok(reading.width >= normal.width, name);
+
+      await page.click('#reading-toggle');
+      assert.equal(await page.getAttribute('#reading-toggle', 'aria-pressed'), 'false', name);
+      assert.equal(await paneVisible(), true, `${name}: the pane is back`);
+      assert.equal(await page.isVisible('#detail'), name !== 'table', `${name}: detail only beside graph and tree`);
+      assert.equal(await page.getAttribute(`#view-switch [data-view=${name}]`, 'aria-pressed'), 'true', name);
+    }
+
+    // The graph is refitted on the way out, even after the window changed size.
+    await page.click('#view-switch [data-view=graph]');
+    await page.click('#reading-toggle');
+    await page.setViewportSize({ width: 1000, height: 700 });
+    await page.click('#reading-toggle');
+    assert.equal(await page.evaluate('window.__OKF_VIEW__.inView()'), true, 'graph fits after reading');
+    await page.setViewportSize({ width: 1400, height: 800 });
+
+    // Switching view while reading keeps reading; the new view shows on the way out.
+    await page.click('#reading-toggle');
+    await page.click('#view-switch [data-view=table]');
+    assert.equal(await paneVisible(), false, 'still reading after switching to the table');
+    assert.equal(await page.isVisible('#detail'), true);
+    await page.click('#reading-toggle');
+    assert.equal(await page.isVisible('#concept-table'), true);
+    assert.equal(await page.isVisible('#detail'), false);
+
+    // Neighbourhood survives a trip through reading view.
+    await page.click('#view-switch [data-view=graph]');
+    await page.click('#hood-toggle');
+    const shown: string[] = await page.evaluate('window.__OKF_VIEW__.visibleIds()');
+    await page.click('#reading-toggle');
+    await page.click('#reading-toggle');
+    assert.deepEqual(new Set(await page.evaluate('window.__OKF_VIEW__.visibleIds()') as string[]), new Set(shown));
+    assert.equal(await page.evaluate('window.__OKF_VIEW__.inView()'), true);
+    await page.click('#hood-toggle');
+  });
+
   view('reading view and the theme toggle work from every view', async () => {
     for (const name of ['graph', 'tree', 'table']) {
       await page.click(`[data-view=${name}]`);

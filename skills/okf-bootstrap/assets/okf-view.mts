@@ -2284,7 +2284,8 @@ const JS = `
     $("filter-type").value = "";
     applyFilters();
     clearFocus();
-    cy.fit(undefined, 40);
+    if (hood) applyHood();
+    else cy.fit(undefined, 40);
   });
 
   $("reading-toggle").addEventListener("click", () => {

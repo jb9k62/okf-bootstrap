@@ -242,11 +242,11 @@
   border-radius: 6px;
   background: var(--surface-2, #f1f5f9);
 }
-.okfw-erd svg {
+.okfw-erd > svg {
   display: block;
   max-width: none;
 }
-.okfw-erd[data-fit='true'] svg {
+.okfw-erd[data-fit="true"] > svg {
   max-width: 100%;
 }
 .okfw-erd-bar {
@@ -255,11 +255,6 @@
   gap: 10px;
   margin: 6px 0;
   font-size: 12.5px;
-}
-.okfw-erd-key {
-  margin: 6px 0 0;
-  font-size: 12.5px;
-  color: var(--text-muted, #64748b);
 }
 .okfw-erd-box {
   fill: var(--surface, #fff);
@@ -456,19 +451,43 @@
   border-radius: 0;
   background: var(--bg, #fff);
 }
-.okfw-erd[data-expanded] svg {
+.okfw-erd[data-expanded] > svg {
   width: 100%;
   height: calc(100vh - 8px);
-  padding: 44px 16px 8px;
+  padding: 64px 16px 8px;
   box-sizing: border-box;
 }
-.okfw-erd-close {
+.okfw-erd-topbar {
   position: fixed;
-  top: 10px;
-  right: 16px;
+  top: 0;
+  left: 0;
+  right: 0;
   z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  background: var(--bg, #fff);
+}
+.okfw-erd-close {
+  flex: none;
   font: inherit;
   font-size: 13px;
+}
+.okfw-erd-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 22px;
+  margin: 0;
+  font-size: 12.5px;
+}
+.okfw-erd-key li span {
+  color: var(--text-muted, #64748b);
+}
+.okfw-erd-key li span::before {
+  content: '\00b7  ';
 }
 .okfw-findings {
   margin-bottom: 8px;
@@ -484,6 +503,6 @@
   stroke: currentColor;
 }
 .okfw-erd-key .okfw-erd-ring {
-  fill: var(--surface, #fff);
+  fill: var(--bg, #fff);
   stroke: currentColor;
 }

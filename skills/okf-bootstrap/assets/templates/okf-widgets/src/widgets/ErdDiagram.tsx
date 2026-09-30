@@ -112,9 +112,24 @@ export default function ErdDiagram({
   return (
     <div className="okfw-erd" data-fit={fit || expanded} data-expanded={expanded || undefined}>
       {expanded && (
-        <button type="button" className="okfw-erd-close" onClick={onCollapse}>
-          Close (Esc)
-        </button>
+        <div className="okfw-erd-topbar">
+          <ul className="okfw-plain okfw-erd-key" aria-label="How to read the line ends">
+            <li>
+              <KeyGlyph kind="one" /> <code>||</code> exactly one <span>NOT NULL key</span>
+            </li>
+            <li>
+              <KeyGlyph kind="zeroOne" /> <code>|o</code> <code>o|</code> zero or one{' '}
+              <span>nullable or unique key</span>
+            </li>
+            <li>
+              <KeyGlyph kind="zeroMany" mirrored /> <code>o{'{'}</code> zero or more <span>the many side</span>
+            </li>
+            <li className="okfw-muted">Drawn from the constraints, not by hand.</li>
+          </ul>
+          <button type="button" className="okfw-erd-close" onClick={onCollapse}>
+            Close (Esc)
+          </button>
+        </div>
       )}
       <svg
         role="img"

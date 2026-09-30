@@ -26,7 +26,7 @@ import {
   type Finding,
   type Safeguards,
 } from '../models/schema.ts';
-import ErdDiagram, { KeyGlyph, type Mark, type Marks } from './ErdDiagram.tsx';
+import ErdDiagram, { type Mark, type Marks } from './ErdDiagram.tsx';
 
 /** What a block with no SQL shows, so a bare ```widget sql-erd``` still works. */
 const SAMPLE = `-- scenario: Sample | Three tables: replace this by writing SQL under the widget name
@@ -187,12 +187,6 @@ export default function SqlErd({ source }: { source: string }) {
             onCollapse={() => setExpanded(false)}
             onPick={onPick}
           />
-          <p className="okfw-erd-key">
-            <KeyGlyph kind="one" /> <code>||</code> exactly one (NOT NULL key) ·{' '}
-            <KeyGlyph kind="zeroOne" /> <code>|o</code> / <code>o|</code> zero or one (nullable or
-            unique key) · <KeyGlyph kind="zeroMany" mirrored /> <code>o{'{'}</code> zero or more. Drawn
-            from the constraints, not by hand.
-          </p>
         </>
       )}
 

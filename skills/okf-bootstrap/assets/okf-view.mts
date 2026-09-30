@@ -546,6 +546,24 @@ ${CSS}
   <div class="controls">
     <input id="search" type="search" placeholder="Filter by title, path or tag" aria-label="Filter the graph">
     <select id="filter-type" aria-label="Filter by type"><option value="">All types</option></select>
+    <div id="view-switch" class="segmented" role="group" aria-label="View">
+      <button type="button" data-view="graph" aria-pressed="true">Graph</button>
+      <button type="button" data-view="tree" aria-pressed="false">Tree</button>
+      <button type="button" data-view="table" aria-pressed="false">Table</button>
+    </div>
+    <select id="color-by" aria-label="Colour concepts by">
+      <option value="type">Colour: type</option>
+      <option value="trust">Colour: trust</option>
+      <option value="freshness">Colour: freshness</option>
+    </select>
+    <button id="hood-toggle" class="graph-only" type="button" aria-pressed="false" title="Show only the open concept and the concepts it links to or is linked from">Neighbourhood</button>
+    <select id="layout" class="graph-only" aria-label="Graph layout">
+      <option value="cose">Force (cose)</option>
+      <option value="concentric">Concentric (hubs in centre)</option>
+      <option value="breadthfirst">Breadth-first (hierarchy)</option>
+      <option value="circle">Circle</option>
+      <option value="grid">Grid</option>
+    </select>
     <button id="reset" type="button">Reset</button>
     <button id="reading-toggle" type="button" aria-pressed="false">Reading view</button>
     <button id="theme-toggle" type="button">Dark theme</button>
@@ -555,7 +573,15 @@ ${CSS}
 <main>
   <section id="graph-pane" aria-label="Concept graph">
     <div id="graph"></div>
-    <ul id="legend" aria-label="Concept types"></ul>
+    <ul id="legend" aria-label="Colour key"></ul>
+    <nav id="tree" aria-label="Concept tree" hidden></nav>
+    <div id="table-wrap" hidden>
+      <table id="concept-table">
+        <thead><tr></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p id="table-empty" hidden>No concepts match the filters.</p>
+    </div>
   </section>
   <section id="detail">
     <p id="detail-empty">Select a concept in the graph.</p>
@@ -689,7 +715,7 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .brand strong { font-size: 15px; color: var(--heading); }
 .brand span { font-size: 12px; color: var(--text-muted); }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; }
-.controls input { width: 220px; }
+.controls input { width: 210px; }
 
 /* Layout: graph on the left, reading pane on the right */
 main { flex: 1; min-height: 0; display: flex; }
@@ -721,6 +747,97 @@ main { flex: 1; min-height: 0; display: flex; }
 #detail-content, #detail-empty { max-width: 46rem; margin: 0 auto; padding: 36px 36px 72px; }
 #detail-empty { color: var(--text-muted); text-align: center; }
 body.reading #graph-pane { display: none; }
+
+/* View switcher */
+.segmented { display: inline-flex; }
+.segmented button { border-radius: 0; margin-left: -1px; }
+.segmented button:first-child { border-radius: 6px 0 0 6px; margin-left: 0; }
+.segmented button:last-child { border-radius: 0 6px 6px 0; }
+.segmented button[aria-pressed="true"] { position: relative; background: var(--surface-2); }
+body:not([data-view="graph"]) .graph-only { display: none; }
+select:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Tree and table views share the left pane; the table takes the whole window */
+body[data-view="table"]:not(.reading) #graph-pane { flex: 1; border-right: 0; }
+body[data-view="table"]:not(.reading) #detail { display: none; }
+body:not([data-view="graph"]) #graph, body[data-view="table"] #legend { display: none; }
+/* In the tree the colour key sits under the list instead of floating over it */
+body[data-view="tree"] #graph-pane { display: flex; flex-direction: column; }
+body[data-view="tree"] #tree { position: static; flex: 1; min-height: 0; }
+body[data-view="tree"] #legend {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  border-width: 1px 0 0;
+  border-radius: 0;
+}
+#tree, #table-wrap { position: absolute; inset: 0; overflow: auto; }
+#tree { padding: 12px 8px 40px; font-size: 14px; }
+#tree details { margin-left: 14px; }
+#tree > details, #tree > .tree-item { margin-left: 0; }
+#tree summary {
+  padding: 3px 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+#tree summary .count { font-weight: 400; margin-left: 6px; }
+.tree-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 1px 0 1px 14px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+  line-height: 1.4;
+}
+#tree > .tree-item { margin-left: 0; }
+.tree-item:hover { background: var(--surface-2); }
+.tree-item[aria-current="true"] { background: var(--surface-2); color: var(--accent); font-weight: 600; }
+.tree-item .dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
+.tree-item .kind { margin-left: auto; padding-left: 8px; font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+#concept-table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.5; }
+#concept-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 0;
+  text-align: left;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border-strong);
+}
+#concept-table th button {
+  width: 100%;
+  padding: 9px 12px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+#concept-table th[aria-sort="ascending"] button::after { content: " ↑"; }
+#concept-table th[aria-sort="descending"] button::after { content: " ↓"; }
+#concept-table th[aria-sort] button { color: var(--accent); }
+#concept-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); vertical-align: top; }
+#concept-table tbody tr { cursor: pointer; }
+#concept-table tbody tr:hover, #concept-table tbody tr[aria-selected="true"] { background: var(--surface-2); }
+#concept-table td:nth-child(5) { white-space: nowrap; }
+#concept-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+#concept-table td a { color: var(--heading); font-weight: 600; text-decoration: none; }
+#concept-table .dot { display: inline-block; width: 9px; height: 9px; margin-right: 8px; border-radius: 50%; }
+#concept-table .muted { color: var(--text-muted); }
+#table-empty { padding: 32px; text-align: center; color: var(--text-muted); }
 
 /* Concept header */
 .concept-header { margin-bottom: 32px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
@@ -1044,6 +1161,7 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
 @media (max-width: 820px) {
   main { flex-direction: column; }
   #graph-pane { flex: 0 0 40vh; border-right: 0; border-bottom: 1px solid var(--border); }
+  body[data-view="table"]:not(.reading) #graph-pane { flex: 1; }
   #detail-content, #detail-empty { padding: 24px 18px 56px; }
   .controls input { width: 100%; }
   #statusbar { padding: 6px 12px; gap: 8px; }
@@ -1068,15 +1186,61 @@ const JS = `
   const backlinks = {};
   for (const edge of bundle.edges) (backlinks[edge.data.target] ||= []).push(edge.data.source);
 
-  for (const type of bundle.types) {
-    $("filter-type").append(new Option(type, type));
-    const item = document.createElement("li");
-    const dot = document.createElement("span");
-    dot.className = "dot";
-    dot.style.background = bundle.palette[type] || bundle.defaultColor;
-    item.append(dot, type);
-    $("legend").append(item);
+  const outLinks = {};
+  for (const edge of bundle.edges) (outLinks[edge.data.source] ||= []).push(edge.data.target);
+
+  for (const type of bundle.types) $("filter-type").append(new Option(type, type));
+
+  // The server colours nodes by type; keep that colour, since colour modes overwrite data.color.
+  for (const node of bundle.nodes) node.data.typeColor = node.data.color;
+
+  // Colour modes. "type" is the OKF type; "trust" is who has checked the concept;
+  // "freshness" is how close it is to its stale_after date.
+  const TRUST_ENTRIES = [
+    ["human-reviewed", "Human reviewed", "#16a34a"],
+    ["machine-confirmed", "Machine confirmed", "#2563eb"],
+    ["unverified", "Unverified", "#d97706"],
+  ];
+  const FRESHNESS_ENTRIES = [
+    ["fresh", "Fresh", "#16a34a"],
+    ["soon", "Stale within 30 days", "#d97706"],
+    ["stale", "Stale", "#dc2626"],
+    ["none", "No expiry set", "#94a3b8"],
+  ];
+  const SOON_MS = 30 * 24 * 3600 * 1000;
+  function freshness(d) {
+    if (d.stale) return "stale";
+    const at = Date.parse(d.stale_after);
+    if (Number.isNaN(at)) return "none";
+    const left = at - Date.now();
+    return left <= 0 ? "stale" : left <= SOON_MS ? "soon" : "fresh";
   }
+  const MODES = {
+    type: {
+      entries: bundle.types.map((type) => [type, type, bundle.palette[type] || bundle.defaultColor]),
+      key: (d) => d.type,
+      fallback: bundle.defaultColor,
+    },
+    trust: { entries: TRUST_ENTRIES, key: (d) => d.trust_tier, fallback: bundle.defaultColor },
+    freshness: { entries: FRESHNESS_ENTRIES, key: freshness, fallback: bundle.defaultColor },
+  };
+  let colorMode = "type";
+  function colorOf(d) {
+    const mode = MODES[colorMode];
+    const hit = mode.entries.find((entry) => entry[0] === mode.key(d));
+    return hit ? hit[2] : mode.fallback;
+  }
+  function renderLegend() {
+    $("legend").replaceChildren(...MODES[colorMode].entries.map(([, label, color]) => {
+      const item = document.createElement("li");
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      dot.style.background = color;
+      item.append(dot, label);
+      return item;
+    }));
+  }
+  renderLegend();
 
   // Cytoscape styles can't read CSS variables, so each theme's graph colours live here.
   function graphStyle() {
@@ -1124,14 +1288,24 @@ const JS = `
       { selector: "edge.focus", style: { "width": 2, "line-color": "#f59e0b", "target-arrow-color": "#f59e0b" } },
       { selector: ".faded", style: { "opacity": 0.25 } },
       { selector: ".dim", style: { "opacity": 0.1 } },
+      { selector: ".hood-hidden", style: { "display": "none" } },
     ];
+  }
+
+  function layoutOptions(name) {
+    const base = { name, animate: false, padding: 40, nodeDimensionsIncludeLabels: true };
+    if (name === "cose") return { ...base, nodeRepulsion: () => 60000, idealEdgeLength: () => 70, nodeOverlap: 20, randomize: false };
+    // Most linked-to concepts go first, so hubs sit at the centre or the top.
+    if (name === "concentric") return { ...base, minNodeSpacing: 30, concentric: (n) => n.indegree(), levelWidth: () => 1 };
+    if (name === "breadthfirst") return { ...base, directed: true, spacingFactor: 1.1, roots: cy.nodes().filter((n) => n.indegree() === 0) };
+    return base;
   }
 
   const cy = cytoscape({
     container: $("graph"),
     elements: [...bundle.nodes, ...bundle.edges],
     style: graphStyle(),
-    layout: { name: "cose", animate: false, padding: 40, nodeDimensionsIncludeLabels: true, nodeRepulsion: () => 60000, idealEdgeLength: () => 70, nodeOverlap: 20, randomize: false },
+    layout: layoutOptions("cose"),
     minZoom: 0.3,
     maxZoom: 2.5,
   });
@@ -1153,7 +1327,7 @@ const JS = `
     node.connectedEdges().addClass("focus");
     const box = node.renderedBoundingBox();
     const offscreen = box.x1 < 0 || box.y1 < 0 || box.x2 > cy.width() || box.y2 > cy.height();
-    if (offscreen && cy.width() > 0) cy.animate({ center: { eles: node } }, { duration: 250 });
+    if (offscreen && cy.width() > 0 && !hood) cy.animate({ center: { eles: node } }, { duration: 250 });
   }
 
   // The URL hash names the open concept, so links, Back/Forward, and reloads all work.
@@ -1168,12 +1342,14 @@ const JS = `
     if (!data) return;
     current = id;
     focusNode(id);
+    if (hood) applyHood();
+    refreshLists();
     document.title = data.label + " | " + window.BUNDLE_NAME;
 
     $("detail-empty").hidden = true;
     $("detail-content").hidden = false;
     $("detail-type").textContent = data.type;
-    $("detail-type").style.setProperty("--chip", data.color);
+    $("detail-type").style.setProperty("--chip", data.typeColor);
     $("detail-title").textContent = data.label;
     $("detail-description").textContent = data.description;
     $("detail-description").hidden = !data.description;
@@ -1276,7 +1452,7 @@ const JS = `
 
   function renderStatusbar(data) {
     $("status-type").textContent = data.type;
-    $("status-type").style.setProperty("--chip", data.color);
+    $("status-type").style.setProperty("--chip", data.typeColor);
     $("status-title").textContent = data.label;
     $("statusbar").classList.remove("shown");
     updateStatusbar();
@@ -1848,27 +2024,268 @@ const JS = `
   }
 
   // Search text and type filter combine: a node must pass both to stay bright.
-  function applyFilters() {
+  function passesFilters(d) {
     const query = $("search").value.trim().toLowerCase();
     const type = $("filter-type").value;
-    cy.nodes().forEach((node) => {
-      const d = node.data();
-      const text = (d.label + " " + d.id + " " + d.tags.join(" ")).toLowerCase();
-      node.toggleClass("dim", (query !== "" && !text.includes(query)) || (type !== "" && d.type !== type));
-    });
+    const text = (d.label + " " + d.id + " " + d.tags.join(" ")).toLowerCase();
+    return (query === "" || text.includes(query)) && (type === "" || d.type === type);
+  }
+
+  function applyFilters() {
+    cy.nodes().forEach((node) => node.toggleClass("dim", !passesFilters(node.data())));
     cy.edges().forEach((edge) => {
       edge.toggleClass("dim", edge.source().hasClass("dim") || edge.target().hasClass("dim"));
     });
+    refreshLists();
   }
   $("search").addEventListener("input", applyFilters);
   $("filter-type").addEventListener("change", applyFilters);
+
+  $("layout").addEventListener("change", () => {
+    cy.layout(layoutOptions($("layout").value)).run();
+    cy.fit(undefined, 40);
+  });
+
+  // --- Views: graph, tree, table ---------------------------------------------
+  let view = "graph";
+  let previousView = "graph";
+  let hood = false;
+
+  function setView(next) {
+    if (next === view) return;
+    if (next !== "table") previousView = next;
+    else previousView = view;
+    view = next;
+    document.body.dataset.view = view;
+    $("tree").hidden = view !== "tree";
+    $("table-wrap").hidden = view !== "table";
+    for (const button of $("view-switch").querySelectorAll("button")) {
+      button.setAttribute("aria-pressed", String(button.dataset.view === view));
+    }
+    if (view === "graph") {
+      cy.resize();
+      if (hood) applyHood();
+      else cy.fit(undefined, 40);
+    }
+    refreshLists();
+  }
+  document.body.dataset.view = "graph";
+  $("view-switch").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-view]");
+    if (button) setView(button.dataset.view);
+  });
+
+  // A row or tree entry behaves like a graph node: open the concept, keeping the URL hash in sync.
+  function open(id) {
+    navigate(id);
+    if (view === "table") setView(previousView);
+  }
+
+  // Tree: concepts grouped by the folders of their path, built once; refreshLists() updates it.
+  const treeItems = [];
+  const treeFolders = [];
+  function buildTree() {
+    const root = { folders: new Map(), items: [] };
+    for (const node of bundle.nodes) {
+      const parts = node.data.id.split("/");
+      let at = root;
+      for (const part of parts.slice(0, -1)) {
+        if (!at.folders.has(part)) at.folders.set(part, { folders: new Map(), items: [] });
+        at = at.folders.get(part);
+      }
+      at.items.push(node.data);
+    }
+    const render = (folder, parent) => {
+      for (const [name, child] of [...folder.folders].sort((a, b) => a[0].localeCompare(b[0]))) {
+        const details = document.createElement("details");
+        details.open = true;
+        const summary = document.createElement("summary");
+        const count = document.createElement("span");
+        count.className = "count";
+        summary.append(name, count);
+        details.append(summary);
+        render(child, details);
+        parent.append(details);
+        treeFolders.push({ details, count });
+      }
+      for (const d of [...folder.items].sort((a, b) => a.label.localeCompare(b.label))) {
+        const link = document.createElement("a");
+        link.className = "tree-item";
+        link.href = "#" + d.id;
+        const dot = document.createElement("span");
+        dot.className = "dot";
+        const label = document.createElement("span");
+        label.textContent = d.label;
+        const kind = document.createElement("span");
+        kind.className = "kind";
+        kind.textContent = d.type;
+        link.append(dot, label, kind);
+        link.addEventListener("click", (event) => { event.preventDefault(); open(d.id); });
+        parent.append(link);
+        treeItems.push({ d, link, dot });
+      }
+    };
+    render(root, $("tree"));
+  }
+  buildTree();
+
+  function refreshTree() {
+    for (const { d, link, dot } of treeItems) {
+      link.hidden = !passesFilters(d);
+      dot.style.background = colorOf(d);
+      const mode = MODES[colorMode];
+      const hit = mode.entries.find((entry) => entry[0] === mode.key(d));
+      dot.title = hit ? hit[1] : "";
+      if (d.id === current) link.setAttribute("aria-current", "true");
+      else link.removeAttribute("aria-current");
+    }
+    // Folders are in reverse depth order (children first), so counts roll up correctly.
+    for (const { details, count } of treeFolders) {
+      const visible = details.querySelectorAll(".tree-item:not([hidden])").length;
+      details.hidden = visible === 0;
+      count.textContent = visible;
+    }
+  }
+
+  // Table: one row per concept, sortable by any column.
+  function latestVerified(d) {
+    const times = d.verified.map((v) => String(v.at || "")).filter(Boolean).sort();
+    return times.length ? times[times.length - 1].slice(0, 10) : "";
+  }
+  const FRESH_LABEL = Object.fromEntries(FRESHNESS_ENTRIES.map((e) => [e[0], e[1]]));
+  const TRUST_LABEL = Object.fromEntries(TRUST_ENTRIES.map((e) => [e[0], e[1]]));
+  const COLUMNS = [
+    { key: "title", label: "Title", value: (d) => d.label.toLowerCase() },
+    { key: "type", label: "Type", value: (d) => d.type.toLowerCase() },
+    { key: "trust", label: "Trust", value: (d) => TRUST_ENTRIES.findIndex((e) => e[0] === d.trust_tier) },
+    { key: "freshness", label: "Freshness", value: (d) => FRESHNESS_ENTRIES.findIndex((e) => e[0] === freshness(d)) },
+    { key: "verified", label: "Verified", value: (d) => latestVerified(d) },
+    { key: "tags", label: "Tags", value: (d) => d.tags.join(" ").toLowerCase() },
+    { key: "in", label: "In", num: true, value: (d) => (backlinks[d.id] || []).length },
+    { key: "out", label: "Out", num: true, value: (d) => (outLinks[d.id] || []).length },
+  ];
+  let sort = { key: "title", dir: 1 };
+  for (const column of COLUMNS) {
+    const th = document.createElement("th");
+    th.scope = "col";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = column.label;
+    button.addEventListener("click", () => {
+      sort = { key: column.key, dir: sort.key === column.key ? -sort.dir : 1 };
+      refreshTable();
+    });
+    th.append(button);
+    column.th = th;
+    document.querySelector("#concept-table thead tr").append(th);
+  }
+
+  function refreshTable() {
+    const column = COLUMNS.find((c) => c.key === sort.key);
+    for (const c of COLUMNS) {
+      if (c === column) c.th.setAttribute("aria-sort", sort.dir === 1 ? "ascending" : "descending");
+      else c.th.removeAttribute("aria-sort");
+    }
+    const rows = bundle.nodes.map((n) => n.data).filter(passesFilters);
+    rows.sort((a, b) => {
+      const x = column.value(a);
+      const y = column.value(b);
+      const order = x < y ? -1 : x > y ? 1 : a.label.localeCompare(b.label);
+      // Blank dates sort last in both directions.
+      if (column.key === "verified" && (x === "" || y === "") && x !== y) return x === "" ? 1 : -1;
+      return order * sort.dir;
+    });
+    $("table-empty").hidden = rows.length > 0;
+    $("concept-table").hidden = rows.length === 0;
+    $("concept-table").querySelector("tbody").replaceChildren(...rows.map((d) => {
+      const tr = document.createElement("tr");
+      tr.tabIndex = 0;
+      if (d.id === current) tr.setAttribute("aria-selected", "true");
+      tr.addEventListener("click", () => open(d.id));
+      tr.addEventListener("keydown", (event) => { if (event.key === "Enter") open(d.id); });
+      const cell = (content, className) => {
+        const td = document.createElement("td");
+        if (className) td.className = className;
+        td.append(content);
+        return td;
+      };
+      const title = document.createElement("a");
+      title.href = "#" + d.id;
+      title.textContent = d.label;
+      title.addEventListener("click", (event) => event.preventDefault());
+      const type = document.createDocumentFragment();
+      const dot = document.createElement("span");
+      dot.className = "dot";
+      dot.style.background = d.typeColor;
+      type.append(dot, d.type);
+      const fresh = freshness(d);
+      const verified = latestVerified(d);
+      tr.append(
+        cell(title),
+        cell(type),
+        cell(TRUST_LABEL[d.trust_tier] || d.trust_tier),
+        cell(FRESH_LABEL[fresh] + (d.status !== "stable" ? " (" + d.status + ")" : "")),
+        cell(verified || "\u2014", verified ? "" : "muted"),
+        cell(d.tags.join(", ")),
+        cell(String((backlinks[d.id] || []).length), "num"),
+        cell(String((outLinks[d.id] || []).length), "num"),
+      );
+      return tr;
+    }));
+  }
+
+  function refreshLists() {
+    if (view === "tree") refreshTree();
+    else if (view === "table") refreshTable();
+  }
+
+  // --- Colour by: type, trust or freshness -------------------------------------
+  $("color-by").addEventListener("change", () => {
+    colorMode = $("color-by").value;
+    cy.batch(() => cy.nodes().forEach((node) => node.data("color", colorOf(node.data()))));
+    renderLegend();
+    refreshTree();
+  });
+  cy.batch(() => cy.nodes().forEach((node) => node.data("color", colorOf(node.data()))));
+
+  // --- Neighbourhood: the open concept, what links to it on the left, what it links to on the right
+  function applyHood() {
+    const focus = cy.getElementById(current);
+    if (focus.empty()) return;
+    const near = focus.closedNeighborhood();
+    cy.elements().not(near).addClass("hood-hidden");
+    near.removeClass("hood-hidden");
+    const ins = focus.incomers("node");
+    const outs = focus.outgoers("node");
+    const both = ins.intersection(outs);
+    const column = (nodes, x, y0) => nodes.forEach((node, i) => node.position({ x, y: y0 + (i - (nodes.length - 1) / 2) * 76 }));
+    focus.position({ x: 0, y: 0 });
+    column(ins.difference(outs), -340, 0);
+    column(outs.difference(ins), 340, 0);
+    column(both, 0, 130 + Math.max(0, (both.length - 1) / 2) * 76);
+    cy.fit(near, 60);
+    if (cy.zoom() > 1.2) { cy.zoom(1.2); cy.center(near); }
+  }
+  $("hood-toggle").addEventListener("click", () => {
+    hood = !hood;
+    $("hood-toggle").setAttribute("aria-pressed", String(hood));
+    $("layout").disabled = hood;
+    if (hood) {
+      applyHood();
+    } else {
+      cy.elements().removeClass("hood-hidden");
+      cy.layout(layoutOptions($("layout").value)).run();
+      cy.fit(undefined, 40);
+    }
+  });
 
   $("reset").addEventListener("click", () => {
     $("search").value = "";
     $("filter-type").value = "";
     applyFilters();
     clearFocus();
-    cy.fit(undefined, 40);
+    if (hood) applyHood();
+    else cy.fit(undefined, 40);
   });
 
   $("reading-toggle").addEventListener("click", () => {
@@ -1876,7 +2293,8 @@ const JS = `
     $("reading-toggle").setAttribute("aria-pressed", String(reading));
     if (!reading) {
       cy.resize();
-      cy.fit(undefined, 40);
+      if (hood) applyHood();
+      else cy.fit(undefined, 40);
     }
   });
 
@@ -1914,6 +2332,11 @@ const JS = `
   window.__OKF_VIEW__ = {
     ids: bundle.nodes.map((node) => node.data.id),
     show,
+    // Graph state for the tests: the nodes currently drawn, and where one sits.
+    visibleIds: () => cy.nodes().filter((node) => node.style("display") !== "none").map((node) => node.id()),
+    position: (id) => cy.getElementById(id).position(),
+    // Whether every drawn node lies inside the graph pane.
+    inView: () => cy.nodes().filter((node) => node.style("display") !== "none").every((node) => { const b = node.renderedBoundingBox(); return b.x1 >= 0 && b.y1 >= 0 && b.x2 <= cy.width() && b.y2 <= cy.height(); }),
     // How many diagrams this concept should produce, counted the way
     // renderMermaid finds them: from the parsed markdown, not from a pattern
     // over the source. An example fence nested inside another fence is a code

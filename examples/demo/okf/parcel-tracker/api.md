@@ -4,6 +4,8 @@ title: API
 description: The routes customers call to track a parcel.
 tags: [api, http]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+verified:
+  - { by: "ci:contract-tests", at: 2026-10-01T12:00:00Z }
 ---
 
 # API

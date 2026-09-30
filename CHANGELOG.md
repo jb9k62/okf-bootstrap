@@ -9,6 +9,21 @@
 - **Demo** grown into the "Parcel tracker" bundle: 13 concepts (overview, architecture, data
   model, API, metric, runbook, three ADRs, two tours) showing types, trust tiers, a draft and
   a stale concept.
+- **`npm run test:views`** (part of `npm run check`, and run in the CI `render` job where Chromium is installed) drives the layout dropdown, the view switcher, sorting, the
+  neighbourhood and the colour modes in Chromium. It serves the viewer's libraries from
+  `node_modules`, so it runs offline; set `OKF_CHROMIUM` to a browser binary if Playwright's
+  isn't installed. Without a browser it skips.
+- **Viewer views**: a Graph | Tree | Table switcher. The tree groups concepts by folder; the
+  table is sortable (title, type, trust, freshness, verified date, links in and out) and takes
+  the full window. Search and the type filter apply to all three. **Neighbourhood** shows only
+  the open concept, with what links to it on the left and what it links to on the right.
+  **Colour** switches nodes between type, trust (human reviewed, machine confirmed, unverified)
+  and freshness (fresh, stale within 30 days, stale, no expiry).
+- **Demo** now mixes trust and freshness: two concepts confirmed by CI, two with a future
+  `stale_after`, one expiring within 30 days, alongside the human-reviewed, unverified and
+  stale ones. The tree view shows the colour key above the list.
+- **Viewer**: layout dropdown restored (force, concentric, breadth-first, circle, grid), as in
+  the reference viewer.
 - **Viewer**: Mermaid edge labels sit on the canvas colour in dark mode instead of grey boxes.
 
 ## 0.3.0 - 2026-09-30

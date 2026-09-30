@@ -28,7 +28,8 @@
     "typecheck": "tsc -p tsconfig.json && npm run typecheck -w okf-widgets",
     "test": "node --test test/*.test.mts && npm test -w okf-widgets",
     "test:render": "node --test test/render.e2e.mts",
-    "check": "npm run typecheck && npm test",
+    "test:views": "node --test test/views.e2e.mts",
+    "check": "npm run typecheck && npm test && npm run test:views",
     "demo": "npm run build -w okf-widgets && node skills/okf-bootstrap/assets/okf-view.mts examples/demo/okf --widgets skills/okf-bootstrap/assets/templates/okf-widgets/dist/okf-widgets.js",
     "install-skill": "node scripts/install-skill.mts",
     "spec": "node scripts/okf-spec.mts",
@@ -40,6 +41,9 @@
   "devDependencies": {
     "@mermaid-js/mermaid-cli": "^11.17.0",
     "@types/node": "^24.13.6",
+    "cytoscape": "3.28.1",
+    "marked": "12.0.2",
+    "mermaid": "11.17.2",
     "playwright": "^1.63.0",
     "typescript": "^7.0.2"
   }

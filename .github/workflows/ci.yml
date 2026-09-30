@@ -33,6 +33,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:render
+      - run: npm run test:views
 
   spec:
     runs-on: ubuntu-latest

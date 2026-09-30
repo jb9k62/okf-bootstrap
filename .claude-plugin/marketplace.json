@@ -1,0 +1,15 @@
+{
+  "name": "okf-bootstrap",
+  "description": "The okf-bootstrap agent skill: OKF knowledge bundles with a viewer, quality gates, and interactive explainers.",
+  "owner": {
+    "name": "jb9k62"
+  },
+  "plugins": [
+    {
+      "name": "okf-bootstrap",
+      "source": "./",
+      "description": "Scaffold an OKF knowledge bundle into a project: validator, graph viewer, Mermaid gates, and interactive widgets and quizzes for explainers.",
+      "version": "0.3.0"
+    }
+  ]
+}

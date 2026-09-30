@@ -1,0 +1,45 @@
+{
+  "name": "okf-bootstrap",
+  "version": "0.3.0",
+  "private": true,
+  "description": "An agent skill (pi, Claude Code) that scaffolds an OKF knowledge bundle into a project: validator, graph viewer, Mermaid gates, and interactive React widgets for explainers.",
+  "license": "MIT",
+  "type": "module",
+  "keywords": [
+    "pi-package",
+    "claude-code",
+    "agent-skill",
+    "okf",
+    "open-knowledge-format",
+    "documentation"
+  ],
+  "engines": {
+    "node": ">=24"
+  },
+  "workspaces": [
+    "skills/okf-bootstrap/assets/templates/okf-widgets"
+  ],
+  "pi": {
+    "skills": [
+      "./skills"
+    ]
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json && npm run typecheck -w okf-widgets",
+    "test": "node --test test/*.test.mts && npm test -w okf-widgets",
+    "test:render": "node --test test/render.e2e.mts",
+    "check": "npm run typecheck && npm test",
+    "demo": "npm run build -w okf-widgets && node skills/okf-bootstrap/assets/okf-view.mts examples/demo/okf --widgets skills/okf-bootstrap/assets/templates/okf-widgets/dist/okf-widgets.js",
+    "install-skill": "node scripts/install-skill.mts",
+    "spec": "node scripts/okf-spec.mts"
+  },
+  "dependencies": {
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@mermaid-js/mermaid-cli": "^11.17.0",
+    "@types/node": "^24.13.6",
+    "playwright": "^1.63.0",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,5 @@
+node_modules/
+dist/
+okf/viz.html
+examples/**/viz.html
+.cache/

@@ -1,0 +1,11 @@
+okf-bootstrap
+
+This product includes the Open Knowledge Format specification
+(skills/okf-bootstrap/references/okf-spec/SPEC.md), copied unmodified from
+https://github.com/GoogleCloudPlatform/knowledge-catalog (okf/SPEC.md) at the
+commit recorded in skills/okf-bootstrap/references/okf-spec/UPSTREAM.json.
+It is licensed under the Apache License, Version 2.0; the licence text is in
+skills/okf-bootstrap/references/okf-spec/LICENSE.md.
+
+skills/okf-bootstrap/assets/okf-view.mts is based on the reference viewer in
+the same repository.

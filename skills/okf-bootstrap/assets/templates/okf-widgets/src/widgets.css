@@ -1,0 +1,235 @@
+/* Widget styles. They read the viewer's own tokens (--surface, --border, --accent and so on),
+   so light and dark both work with no tokens of their own. Every rule is under .okfw, and the
+   classes below are a small kit to build new widgets from; add widget-specific rules at the
+   end, prefixed with the widget's name. */
+
+.okfw {
+  --okfw-good: #16a34a;
+  --okfw-bad: #dc2626;
+  --okfw-warn-bg: color-mix(in srgb, #f59e0b 14%, transparent);
+  --okfw-good-bg: color-mix(in srgb, var(--okfw-good) 12%, transparent);
+  --okfw-bad-bg: color-mix(in srgb, var(--okfw-bad) 12%, transparent);
+  margin: 0 0 1.5em;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--border-strong, #cbd5e1);
+  border-top: 3px solid var(--accent, #2563eb);
+  border-radius: 8px;
+  background: var(--surface, #fff);
+  font-size: 14px;
+}
+.okfw figcaption {
+  margin: 0 0 10px;
+  font-weight: 600;
+  color: var(--heading, #0f172a);
+}
+.okfw h4 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  color: var(--heading, #0f172a);
+}
+.okfw section {
+  min-width: 0;
+}
+.okfw section > h4:first-child {
+  margin-top: 0;
+}
+.okfw button,
+.okfw select,
+.okfw input[type='number'] {
+  font: inherit;
+  font-size: 13px;
+}
+.okfw input[type='number'] {
+  width: 5em;
+}
+.okfw code {
+  font-size: 0.9em;
+}
+
+/* Layout */
+.okfw-columns {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.okfw-row,
+.okfw-toggle {
+  display: block;
+  margin: 8px 0;
+}
+/* The viewer's .prose rules indent and bullet lists; widget lists are layouts. */
+.okfw .okfw-plain {
+  margin: 0;
+  padding-left: 0;
+  list-style: none;
+}
+.okfw-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.okfw-presets button[aria-pressed='true'] {
+  border-color: var(--accent, #2563eb);
+}
+
+/* Text */
+.okfw-reason {
+  display: block;
+  font-size: 12px;
+  color: var(--text-muted, #64748b);
+}
+.okfw-muted {
+  color: var(--text-muted, #64748b);
+}
+.okfw-big {
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--heading, #0f172a);
+}
+.okfw-big[data-bad='true'] {
+  color: var(--okfw-bad);
+}
+/* The honesty line: what is real code, what is a model. Every widget has one. */
+.okfw-model {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--text-muted, #64748b);
+}
+
+/* Messages */
+.okfw-note,
+.okfw-warn,
+.okfw-error {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.okfw-note {
+  background: var(--surface-2, #f1f5f9);
+}
+.okfw-warn {
+  background: var(--okfw-warn-bg);
+}
+.okfw-error {
+  background: var(--okfw-bad-bg);
+  font-family: ui-monospace, monospace;
+  font-size: 12.5px;
+}
+
+/* Facts: a two-column definition list for the widget's result */
+.okfw-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 12px;
+  align-items: baseline;
+  margin: 10px 0 0;
+}
+.okfw-facts dt {
+  color: var(--text-muted, #64748b);
+}
+.okfw-facts dd {
+  margin: 0;
+}
+
+/* Tables */
+.okfw-table-wrap {
+  overflow-x: auto;
+}
+.okfw-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+.okfw-table th,
+.okfw-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+  text-align: left;
+}
+.okfw-table thead th {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted, #64748b);
+}
+.okfw-table [data-ok='true'] strong {
+  color: var(--okfw-good);
+}
+.okfw-table [data-ok='false'] strong {
+  color: var(--okfw-bad);
+}
+
+/* Ruler: labelled tracks with ticks, a band and a marker, over a shared axis */
+.okfw-ruler {
+  display: grid;
+  grid-template-columns: 44px 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  margin: 10px 0 4px;
+}
+.okfw-ruler-label {
+  font-size: 11px;
+  color: var(--text-muted, #64748b);
+}
+.okfw-track {
+  position: relative;
+  height: 30px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--surface-2, #f1f5f9);
+}
+.okfw-band {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: color-mix(in srgb, var(--accent, #2563eb) 22%, transparent);
+}
+.okfw-tick {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  padding: 2px 3px;
+  border-left: 1px solid var(--border-strong, #cbd5e1);
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  line-height: 1.25;
+  color: var(--text-muted, #64748b);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.okfw-tick[data-strong='true'] {
+  border-left: 2px solid var(--heading, #0f172a);
+  color: var(--heading, #0f172a);
+}
+.okfw-marker {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--okfw-bad);
+}
+.okfw-slider {
+  width: calc(100% - 52px);
+  margin: 4px 0 0 52px;
+}
+
+/* Bars: a minimal histogram, one span per bucket, height set inline */
+.okfw-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 80px;
+  padding: 4px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 4px;
+  background: var(--surface-2, #f1f5f9);
+}
+.okfw-bars span {
+  flex: 1 1 0;
+  min-width: 1px;
+  background: var(--accent, #2563eb);
+  border-radius: 1px 1px 0 0;
+}

@@ -1,0 +1,12 @@
+{
+  "name": "okf-bootstrap",
+  "version": "0.3.0",
+  "description": "Scaffold an OKF (Open Knowledge Format) knowledge bundle into a project: validator, graph viewer, Mermaid gates, and interactive React widgets and quizzes for explainers.",
+  "author": {
+    "name": "jb9k62"
+  },
+  "homepage": "https://github.com/jb9k62/okf-bootstrap",
+  "repository": "https://github.com/jb9k62/okf-bootstrap",
+  "license": "MIT",
+  "keywords": ["okf", "documentation", "knowledge-bundle", "explainers", "mermaid"]
+}

@@ -346,6 +346,12 @@
 }
 .okfw-erd-ring {
   fill: var(--surface-2, #f1f5f9);
+  stroke: var(--text-muted, #64748b);
+  stroke-width: 1.3;
+}
+.okfw-erd-edge[data-heavy] .okfw-erd-ring {
+  stroke: var(--accent, #2563eb);
+  stroke-width: 2;
 }
 
 .okfw-safeguards {
@@ -466,4 +472,18 @@
 }
 .okfw-findings {
   margin-bottom: 8px;
+}
+
+.okfw-erd-keyglyph {
+  vertical-align: middle;
+  overflow: visible;
+  color: var(--text, #1e293b);
+}
+.okfw-erd-key .okfw-erd-edge path,
+.okfw-erd-key .okfw-erd-edge line {
+  stroke: currentColor;
+}
+.okfw-erd-key .okfw-erd-ring {
+  fill: var(--surface, #fff);
+  stroke: currentColor;
 }

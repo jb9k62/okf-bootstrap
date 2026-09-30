@@ -77,6 +77,18 @@ function Glyph({ kind, end }: { kind: 'one' | 'zeroOne' | 'zeroMany'; end: End }
   );
 }
 
+/** One line end, drawn as in the diagram, for the key under it. `mirrored` puts the entity on the right. */
+export function KeyGlyph({ kind, mirrored = false }: { kind: 'one' | 'zeroOne' | 'zeroMany'; mirrored?: boolean }) {
+  return (
+    <svg className="okfw-erd-keyglyph" width={36} height={16} viewBox="0 0 36 16" aria-hidden="true">
+      <g className="okfw-erd-edge" transform={mirrored ? 'translate(36,0) scale(-1,1)' : undefined}>
+        <line x1={0} y1={8} x2={36} y2={8} />
+        <Glyph kind={kind} end={{ x: 0, y: 8, dir: 1 }} />
+      </g>
+    </svg>
+  );
+}
+
 export default function ErdDiagram({
   schema,
   marks,

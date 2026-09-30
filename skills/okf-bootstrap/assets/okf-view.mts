@@ -1137,6 +1137,10 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
   text-transform: uppercase;
   color: var(--callout-accent, var(--text-muted));
 }
+.prose .erd-glyph { display: inline-block; vertical-align: middle; line-height: 0; color: var(--text); }
+.prose .erd-glyph svg { overflow: visible; }
+.prose .erd-glyph path { fill: none; stroke: currentColor; stroke-width: 1.4; }
+.prose .erd-glyph circle { fill: color-mix(in srgb, var(--callout-accent) 9%, var(--surface)); stroke: currentColor; stroke-width: 1.4; }
 .prose .callout-note { --callout-accent: #2563eb; }
 .prose .callout-tip { --callout-accent: #0d9488; }
 .prose .callout-important { --callout-accent: #7c3aed; }
@@ -1591,6 +1595,7 @@ const JS = `
     if (first && first.tagName === "H1") first.remove();
 
     renderCallouts(body);
+    drawErdKeys(body);
     renderQuizzes(body);
     renderWidgets(body);
     addHeadingIds(body);
@@ -1735,6 +1740,65 @@ const JS = `
       // Snapshot the children first: append() would move them out of the live list.
       box.append(title, ...[...quote.childNodes]);
       quote.replaceWith(box);
+    }
+  }
+
+  // --- ER diagram keys --------------------------------------------------------
+  // The generated key under an erDiagram names Mermaid's symbols as text (||--o{). Here each
+  // one is drawn the way the diagram draws it, with the text kept beside it for authoring.
+  // Left-hand symbols are drawn with their entity on the left; right-hand ones are mirrored.
+  const ERD_LEFT = { "||": "one", "|o": "zeroOne", "}o": "zeroMany", "}|": "oneMany" };
+  const ERD_RIGHT = { "||": "one", "o|": "zeroOne", "o{": "zeroMany", "|{": "oneMany" };
+
+  function erdEnd(kind, width, mirrored) {
+    const foot = "M12 8L0.5 2M12 8H0.5M12 8L0.5 14";
+    const shapes = {
+      one: '<path d="M9 3V13M14 3V13"/>',
+      zeroOne: '<path d="M9 3V13"/><circle cx="18" cy="8" r="3.5"/>',
+      zeroMany: '<path d="' + foot + '"/><circle cx="18" cy="8" r="3.5"/>',
+      oneMany: '<path d="' + foot + 'M17 3V13"/>',
+    };
+    const place = mirrored ? ' transform="translate(' + width + ',0) scale(-1,1)"' : "";
+    return "<g" + place + ">" + shapes[kind] + "</g>";
+  }
+
+  // One svg: an optional end on each side of a solid or dashed line.
+  function erdSvg(left, right, dashed, width, label) {
+    const svg = document.createElement("span");
+    svg.className = "erd-glyph";
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", label);
+    svg.innerHTML =
+      '<svg width="' + width + '" height="16" viewBox="0 0 ' + width + ' 16" aria-hidden="true">' +
+      '<path d="M0 8H' + width + '"' + (dashed ? ' stroke-dasharray="4 3"' : "") + "/>" +
+      (left ? erdEnd(left, width, false) : "") +
+      (right ? erdEnd(right, width, true) : "") +
+      "</svg>";
+    return svg;
+  }
+
+  function drawErdKeys(root) {
+    for (const title of root.querySelectorAll(".callout .callout-title")) {
+      if (title.textContent.trim() !== "Reading the diagram") continue;
+      for (const code of [...title.parentElement.querySelectorAll("code")]) {
+        const text = code.textContent;
+        const parts = text.split(" ");
+        if (parts.length === 3 && parts[1].length === 6 && ERD_LEFT[parts[1].slice(0, 2)] && ERD_RIGHT[parts[1].slice(4)]) {
+          // A whole relationship: entity, line with both ends, entity.
+          const glyph = erdSvg(ERD_LEFT[parts[1].slice(0, 2)], ERD_RIGHT[parts[1].slice(4)], parts[1].slice(2, 4) === "..", 76, parts[1]);
+          const first = document.createElement("code");
+          first.textContent = parts[0];
+          const last = document.createElement("code");
+          last.textContent = parts[2];
+          code.replaceWith(first, " ", glyph, " ", last);
+        } else if (text === "--" || text === "..") {
+          code.before(erdSvg(null, null, text === "..", 36, text), " ");
+        } else if (ERD_LEFT[text] || ERD_RIGHT[text]) {
+          // Right-hand spellings are the mirror image of the left-hand ones.
+          const right = ERD_RIGHT[text] && text !== "||" && !ERD_LEFT[text];
+          code.before(erdSvg(right ? null : ERD_LEFT[text], right ? ERD_RIGHT[text] : null, false, 36, text), " ");
+        }
+      }
     }
   }
 

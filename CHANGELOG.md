@@ -7,7 +7,8 @@
   in words), written into the markdown between `<!-- okf:erd-legend -->` markers. `okf:validate`
   reports a missing or out-of-date key as an `erd-legend` issue, and the new `okf:fix` script
   (`okf-view.mts --fix`) writes or refreshes every key, so no agent has to remember it. The demo's
-  data model has one.
+  data model has one. The viewer draws each symbol in the key as the diagram draws it (crow's
+  feet, bars, rings), with the text beside it for authoring.
 - **`sql-erd` widget**: a micro-world for a SQL schema, for complicated schemas or on request.
   Put the `CREATE TABLE` statements under the widget name in the ` ```widget ` block. It shows
   scenarios (`-- scenario: Title | blurb`; a small schema, then the same business grown large,

@@ -29,7 +29,7 @@
     "test": "node --test test/*.test.mts && npm test -w okf-widgets",
     "test:render": "node --test test/render.e2e.mts",
     "test:views": "node --test test/views.e2e.mts",
-    "check": "npm run typecheck && npm test",
+    "check": "npm run typecheck && npm test && npm run test:views",
     "demo": "npm run build -w okf-widgets && node skills/okf-bootstrap/assets/okf-view.mts examples/demo/okf --widgets skills/okf-bootstrap/assets/templates/okf-widgets/dist/okf-widgets.js",
     "install-skill": "node scripts/install-skill.mts",
     "spec": "node scripts/okf-spec.mts",

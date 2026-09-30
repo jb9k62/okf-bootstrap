@@ -9,7 +9,7 @@
 - **Demo** grown into the "Parcel tracker" bundle: 13 concepts (overview, architecture, data
   model, API, metric, runbook, three ADRs, two tours) showing types, trust tiers, a draft and
   a stale concept.
-- **`npm run test:views`** drives the layout dropdown, the view switcher, sorting, the
+- **`npm run test:views`** (part of `npm run check`, and run in the CI `render` job where Chromium is installed) drives the layout dropdown, the view switcher, sorting, the
   neighbourhood and the colour modes in Chromium. It serves the viewer's libraries from
   `node_modules`, so it runs offline; set `OKF_CHROMIUM` to a browser binary if Playwright's
   isn't installed. Without a browser it skips.

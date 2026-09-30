@@ -9,6 +9,10 @@
 - **Demo** grown into the "Parcel tracker" bundle: 13 concepts (overview, architecture, data
   model, API, metric, runbook, three ADRs, two tours) showing types, trust tiers, a draft and
   a stale concept.
+- **`npm run test:views`** drives the layout dropdown, the view switcher, sorting, the
+  neighbourhood and the colour modes in Chromium. It serves the viewer's libraries from
+  `node_modules`, so it runs offline; set `OKF_CHROMIUM` to a browser binary if Playwright's
+  isn't installed. Without a browser it skips.
 - **Viewer views**: a Graph | Tree | Table switcher. The tree groups concepts by folder; the
   table is sortable (title, type, trust, freshness, verified date, links in and out) and takes
   the full window. Search and the type filter apply to all three. **Neighbourhood** shows only

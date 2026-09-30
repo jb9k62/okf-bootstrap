@@ -2331,6 +2331,9 @@ const JS = `
   window.__OKF_VIEW__ = {
     ids: bundle.nodes.map((node) => node.data.id),
     show,
+    // Graph state for the tests: the nodes currently drawn, and where one sits.
+    visibleIds: () => cy.nodes().filter((node) => node.style("display") !== "none").map((node) => node.id()),
+    position: (id) => cy.getElementById(id).position(),
     // How many diagrams this concept should produce, counted the way
     // renderMermaid finds them: from the parsed markdown, not from a pattern
     // over the source. An example fence nested inside another fence is a code

@@ -9,6 +9,12 @@
 - **Demo** grown into the "Parcel tracker" bundle: 13 concepts (overview, architecture, data
   model, API, metric, runbook, three ADRs, two tours) showing types, trust tiers, a draft and
   a stale concept.
+- **Viewer views**: a Graph | Tree | Table switcher. The tree groups concepts by folder; the
+  table is sortable (title, type, trust, freshness, verified date, links in and out) and takes
+  the full window. Search and the type filter apply to all three. **Neighbourhood** shows only
+  the open concept, with what links to it on the left and what it links to on the right.
+  **Colour** switches nodes between type, trust (human reviewed, machine confirmed, unverified)
+  and freshness (fresh, stale within 30 days, stale, no expiry).
 - **Viewer**: layout dropdown restored (force, concentric, breadth-first, circle, grid), as in
   the reference viewer.
 - **Viewer**: Mermaid edge labels sit on the canvas colour in dark mode instead of grey boxes.

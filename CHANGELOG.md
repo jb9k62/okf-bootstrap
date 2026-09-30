@@ -15,6 +15,9 @@
   the open concept, with what links to it on the left and what it links to on the right.
   **Colour** switches nodes between type, trust (human reviewed, machine confirmed, unverified)
   and freshness (fresh, stale within 30 days, stale, no expiry).
+- **Demo** now mixes trust and freshness: two concepts confirmed by CI, two with a future
+  `stale_after`, one expiring within 30 days, alongside the human-reviewed, unverified and
+  stale ones. The tree view shows the colour key above the list.
 - **Viewer**: layout dropdown restored (force, concentric, breadth-first, circle, grid), as in
   the reference viewer.
 - **Viewer**: Mermaid edge labels sit on the canvas colour in dark mode instead of grey boxes.

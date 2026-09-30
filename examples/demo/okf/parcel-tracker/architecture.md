@@ -4,6 +4,7 @@ title: Architecture
 description: The API, the poller, the store and the notifier, and how one status update flows through them.
 tags: [architecture]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+stale_after: 2027-04-01T00:00:00Z
 verified:
   - { by: "human:sam", at: 2026-10-01T15:30:00Z }
 ---

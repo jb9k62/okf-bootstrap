@@ -715,7 +715,7 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .brand strong { font-size: 15px; color: var(--heading); }
 .brand span { font-size: 12px; color: var(--text-muted); }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; }
-.controls input { width: 180px; }
+.controls input { width: 210px; }
 
 /* Layout: graph on the left, reading pane on the right */
 main { flex: 1; min-height: 0; display: flex; }
@@ -760,7 +760,18 @@ select:disabled { opacity: 0.5; cursor: not-allowed; }
 /* Tree and table views share the left pane; the table takes the whole window */
 body[data-view="table"]:not(.reading) #graph-pane { flex: 1; border-right: 0; }
 body[data-view="table"]:not(.reading) #detail { display: none; }
-body:not([data-view="graph"]) #graph, body:not([data-view="graph"]) #legend { display: none; }
+body:not([data-view="graph"]) #graph, body[data-view="table"] #legend { display: none; }
+/* In the tree the colour key sits under the list instead of floating over it */
+body[data-view="tree"] #graph-pane { display: flex; flex-direction: column; }
+body[data-view="tree"] #tree { position: static; flex: 1; min-height: 0; }
+body[data-view="tree"] #legend {
+  position: static;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 16px;
+  border-width: 1px 0 0;
+  border-radius: 0;
+}
 #tree, #table-wrap { position: absolute; inset: 0; overflow: auto; }
 #tree { padding: 12px 8px 40px; font-size: 14px; }
 #tree details { margin-left: 14px; }

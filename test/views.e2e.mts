@@ -262,6 +262,50 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.click('[data-view=graph]');
   });
 
+  view('expanding a diagram fills the window in graph, tree and reading view, and Esc restores it', async () => {
+    await page.click('#view-switch [data-view=graph]');
+    await page.evaluate(() => window.__OKF_VIEW__.show('parcel-tracker/architecture'));
+    await page.waitForSelector('.mermaid[data-state=rendered]', { timeout: 30_000 });
+    const svgWidth = () => page.evaluate(() => document.querySelector('.mermaid svg')!.getBoundingClientRect().width);
+    const inline = await svgWidth();
+    const geometry = () =>
+      page.evaluate(() => {
+        const fig = document.querySelector('.mermaid')!.getBoundingClientRect();
+        const canvas = document.querySelector('.mermaid-canvas')!.getBoundingClientRect();
+        const tools = document.querySelector('.mermaid-tools')!.getBoundingClientRect();
+        const mid = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+        return {
+          fig, canvasHeight: canvas.height, toolsHeight: tools.height, w: innerWidth, h: innerHeight,
+          onTop: !!mid && !!mid.closest('.mermaid'),
+        };
+      });
+
+    for (const mode of ['graph', 'tree', 'reading']) {
+      if (mode === 'tree') await page.click('#view-switch [data-view=tree]');
+      if (mode === 'reading') await page.click('#reading-toggle');
+      await page.click('.mermaid-tools button[data-act=expand]');
+      await page.waitForFunction(() => document.querySelector('.mermaid.expanded .mermaid-canvas')!.getBoundingClientRect().height > 600);
+      let g = await geometry();
+      assert.deepEqual([g.fig.x, g.fig.y, g.fig.width, g.fig.height], [0, 0, g.w, g.h], `${mode}: covers the window`);
+      assert.ok(g.onTop, `${mode}: sits above the page`);
+      assert.ok(Math.abs(g.canvasHeight + g.toolsHeight - g.h) <= 2, `${mode}: the canvas fills under the toolbar`);
+      assert.ok((await svgWidth()) > inline, `${mode}: the diagram is enlarged to fit`);
+
+      // A resize while expanded refills the new window.
+      await page.setViewportSize({ width: 1000, height: 600 });
+      await page.waitForFunction(() => Math.abs(document.querySelector('.mermaid-canvas')!.getBoundingClientRect().height - (innerHeight - 38)) < 30);
+      g = await geometry();
+      assert.deepEqual([g.fig.width, g.fig.height], [1000, 600], `${mode}: refits after resize`);
+      await page.setViewportSize({ width: 1400, height: 800 });
+
+      await page.keyboard.press('Escape');
+      assert.equal(await page.locator('.mermaid.expanded').count(), 0, `${mode}: Esc closes`);
+      await page.waitForFunction(() => document.querySelector('.mermaid-canvas')!.getBoundingClientRect().height < 500);
+      if (mode === 'reading') await page.click('#reading-toggle');
+    }
+    await page.click('#view-switch [data-view=graph]');
+  });
+
   view('reading view hides the list or graph, shows the concept, and restores each view', async () => {
     const ids: string[] = await page.evaluate('window.__OKF_VIEW__.ids');
     await page.evaluate((id) => window.__OKF_VIEW__.show(id), ids[0]!);

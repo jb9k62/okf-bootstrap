@@ -1886,10 +1886,14 @@ const JS = `
   function sizeDiagramCanvas(figure) {
     const view = diagramView(figure);
     if (!view) return;
+    if (figure.classList.contains("expanded")) {
+      // Fill everything under the toolbar.
+      const tools = figure.querySelector(".mermaid-tools");
+      view.canvas.style.height = Math.max(240, window.innerHeight - (tools ? tools.offsetHeight + 1 : 0)) + "px";
+      return;
+    }
     const available = view.canvas.clientWidth || view.width;
-    const cap = figure.classList.contains("expanded")
-      ? Math.max(240, window.innerHeight - 56) // the toolbar is the only chrome left
-      : Math.max(220, Math.min(Math.round(window.innerHeight * 0.7), 620));
+    const cap = Math.max(220, Math.min(Math.round(window.innerHeight * 0.7), 620));
     const height = Math.max(150, Math.min(view.height * Math.min(1, available / view.width), cap));
     view.canvas.style.height = Math.round(height) + "px";
   }
@@ -1899,7 +1903,9 @@ const JS = `
     if (!view) return;
     const available = view.canvas.clientWidth || view.width;
     const availableHeight = view.canvas.clientHeight || view.height;
-    const scale = Math.min(available / view.width, availableHeight / view.height, 1);
+    // Expanded, a small diagram grows to fill the screen; inline it never exceeds its natural size.
+    const most = figure.classList.contains("expanded") ? 4 : 1;
+    const scale = Math.min(available / view.width, availableHeight / view.height, most);
     view.scale = scale > 0 ? scale : 1;
     view.x = (available - view.width * view.scale) / 2;
     view.y = (availableHeight - view.height * view.scale) / 2;

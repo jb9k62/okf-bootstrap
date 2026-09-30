@@ -225,6 +225,23 @@ describe('viewer views', { timeout: 120_000 }, () => {
     assert.equal((await page.evaluate('window.__OKF_VIEW__.visibleIds()') as string[]).length, ids.length);
   });
 
+  view('reset in neighbourhood mode clears filters and keeps the neighbourhood in view', async () => {
+    const ids: string[] = await page.evaluate('window.__OKF_VIEW__.ids');
+    await page.evaluate((id) => window.__OKF_VIEW__.show(id), ids[0]!);
+    await page.click('#hood-toggle');
+    const before: string[] = await page.evaluate('window.__OKF_VIEW__.visibleIds()');
+    assert.ok(before.length < ids.length);
+
+    await page.fill('#search', 'zzzz');
+    await page.click('#reset');
+    assert.equal(await page.inputValue('#search'), '');
+    assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'true');
+    assert.deepEqual(new Set(await page.evaluate('window.__OKF_VIEW__.visibleIds()') as string[]), new Set(before));
+    assert.equal(await page.evaluate('window.__OKF_VIEW__.inView()'), true);
+
+    await page.click('#hood-toggle');
+  });
+
   view('colour modes recolour the key and the tree dots', async () => {
     const key = () => page.$$eval('#legend li', (items) => items.map((i) => i.textContent?.trim() ?? ''));
     const typeKey = await key();

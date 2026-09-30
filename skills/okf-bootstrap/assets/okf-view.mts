@@ -2335,6 +2335,8 @@ const JS = `
     // Graph state for the tests: the nodes currently drawn, and where one sits.
     visibleIds: () => cy.nodes().filter((node) => node.style("display") !== "none").map((node) => node.id()),
     position: (id) => cy.getElementById(id).position(),
+    // Whether every drawn node lies inside the graph pane.
+    inView: () => cy.nodes().filter((node) => node.style("display") !== "none").every((node) => { const b = node.renderedBoundingBox(); return b.x1 >= 0 && b.y1 >= 0 && b.x2 <= cy.width() && b.y2 <= cy.height(); }),
     // How many diagrams this concept should produce, counted the way
     // renderMermaid finds them: from the parsed markdown, not from a pattern
     // over the source. An example fence nested inside another fence is a code

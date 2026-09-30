@@ -1,0 +1,60 @@
+name: screenshots
+
+# Regenerates the README images (docs/images) from the demo bundle, and commits them when they
+# changed. Runs by hand, and on main whenever something that shows up in them changes.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - skills/okf-bootstrap/assets/okf-view.mts
+      - skills/okf-bootstrap/assets/templates/okf-widgets/src/**
+      - examples/demo/**
+      - scripts/screenshots.mts
+      - .github/workflows/screenshots.yml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: screenshots
+  cancel-in-progress: true
+
+jobs:
+  screenshots:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # The viewer uses system-ui. Pin it to Noto Sans, so the images do not change font
+      # depending on what the runner image happens to prefer.
+      - name: Fonts
+        run: |
+          sudo apt-get install -y --no-install-recommends fonts-noto-core
+          mkdir -p ~/.config/fontconfig
+          cat > ~/.config/fontconfig/fonts.conf <<'XML'
+          <?xml version="1.0"?>
+          <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
+          <fontconfig>
+            <alias><family>system-ui</family><prefer><family>Noto Sans</family></prefer></alias>
+            <alias><family>sans-serif</family><prefer><family>Noto Sans</family></prefer></alias>
+          </fontconfig>
+          XML
+          fc-cache -f
+      - run: npm run screenshots
+      - name: Commit changed images
+        run: |
+          if [ -z "$(git status --porcelain -- docs/images)" ]; then
+            echo "Images unchanged."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898283+github-actions[bot]@users.noreply.github.com"
+          git add docs/images
+          git commit -m "Regenerate README screenshots"
+          git push

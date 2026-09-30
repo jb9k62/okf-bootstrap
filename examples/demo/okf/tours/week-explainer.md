@@ -3,10 +3,13 @@ type: Explainer
 title: "Guided tour: which week is it?"
 description: "Why a week that starts at Monday 00:00 UTC puts some local Mondays in the previous week, with a widget to scrub time across zones."
 tags: [explainer, guided-tour, time, weeks]
+generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
 ---
 
 A short tour for anyone who groups data by week. When a week is defined on the UTC clock, it
-starts at the same instant for everyone, which is the point. It also means the local calendar
+starts at the same instant for everyone, which is the point, and it is how the
+[weekly delivery report](/parcel-tracker/weekly-report.md) counts
+([ADR-0002](/adr/0002-weeks-on-the-utc-clock.md)). It also means the local calendar
 and the week can disagree for a few hours each Monday.
 
 ## Intuition

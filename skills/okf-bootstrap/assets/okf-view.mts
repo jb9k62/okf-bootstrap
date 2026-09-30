@@ -964,6 +964,12 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
 }
 .mermaid-canvas.dragging { cursor: grabbing; }
 .mermaid-canvas svg { display: block; max-width: none; }
+/* Edge labels sit on the canvas colour in both themes, so a line passes behind the text
+   (Mermaid's dark theme otherwise paints every label a fixed grey box). */
+.mermaid-canvas .edgeLabel,
+.mermaid-canvas .edgeLabel p,
+.mermaid-canvas .labelBkg { background-color: var(--surface) !important; }
+.mermaid-canvas .edgeLabel rect { fill: var(--surface) !important; }
 .prose .mermaid[data-state="error"] { padding: 20px; text-align: left; border-color: #fca5a5; }
 .prose .mermaid[data-state="error"] p { color: #b91c1c; font-size: 14px; }
 .prose .mermaid[data-state="error"] pre { margin-bottom: 0; }

@@ -3,10 +3,11 @@ type: Explainer
 title: "Guided tour: retries without a stampede"
 description: "Start here. Why a client waits longer after each failure, why every client must wait a different amount, and what the cap is for. Closes with a quiz."
 tags: [explainer, guided-tour, retries, reliability]
+generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
 ---
 
 This tour is for anyone about to change how a client retries. By the end you should be able
-to say why the [retry policy](/demo/retry-policy.md) has each of its settings, and what breaks
+to say why the [retry policy](/parcel-tracker/retry-policy.md) has each of its settings, and what breaks
 without it. There is a widget in the middle and a [quiz](#quiz) at the end.
 
 ## Background

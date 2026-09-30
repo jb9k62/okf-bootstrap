@@ -31,7 +31,8 @@
     "check": "npm run typecheck && npm test",
     "demo": "npm run build -w okf-widgets && node skills/okf-bootstrap/assets/okf-view.mts examples/demo/okf --widgets skills/okf-bootstrap/assets/templates/okf-widgets/dist/okf-widgets.js",
     "install-skill": "node scripts/install-skill.mts",
-    "spec": "node scripts/okf-spec.mts"
+    "spec": "node scripts/okf-spec.mts",
+    "screenshots": "node scripts/screenshots.mts"
   },
   "dependencies": {
     "yaml": "^2.9.1"

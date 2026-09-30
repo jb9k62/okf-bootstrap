@@ -4,7 +4,8 @@
  *
  * The viewer loads Cytoscape, marked and Mermaid from a CDN. When those packages resolve from
  * node_modules the test serves them from there, so it also runs offline; otherwise it uses the
- * network. Needs playwright's Chromium (set OKF_CHROMIUM to a browser binary if the bundled one
+ * network. The devDependencies pin the versions the viewer loads and the page keeps its
+ * integrity hashes, so a drift between the two fails the test. Needs playwright's Chromium (set OKF_CHROMIUM to a browser binary if the bundled one
  * is not installed); without a browser the tests skip. Run with npm run test:views.
  */
 import assert from 'node:assert/strict';
@@ -58,9 +59,6 @@ describe('viewer views', { timeout: 120_000 }, () => {
       encoding: 'utf8',
     });
     assert.equal(built.status, 0, built.stdout + built.stderr);
-    // Served libraries differ from the pinned CDN build, so their integrity hashes cannot match.
-    const html = fs.readFileSync(out, 'utf8').replace(/ integrity="[^"]*"/g, '');
-    fs.writeFileSync(out, html);
 
     try {
       const { chromium } = await import('playwright');

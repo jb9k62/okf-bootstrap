@@ -1,7 +1,8 @@
 # okf-widgets
 
 Interactive React widgets ("micro-worlds") for this project's OKF bundle. A concept embeds one
-with a fenced block whose language is `widget` and whose only line is the widget's name:
+with a fenced block whose language is `widget`. The first line is the widget's name; anything
+below it is data for that widget, which most widgets ignore:
 
 ````markdown
 ```widget
@@ -9,12 +10,15 @@ retry-backoff
 ```
 ````
 
+A widget that takes data (`sql-erd` reads a schema's SQL) gets the text below the name as its
+`source` prop, and the viewer passes it through `mount(element, name, source)`.
+
 `npm run okf:view` builds this package to one IIFE file (`dist/okf-widgets.js`) and inlines it
 into `okf/viz.html`, so the viewer stays a single self-contained page. The package is
 documentation tooling: it is not imported by the product and ships nothing to users.
 
-This package was scaffolded by okf-bootstrap and now belongs to this project. The two widgets
-it came with (`utc-week`, `retry-backoff`) are worked examples. Keep them as references,
+This package was scaffolded by okf-bootstrap and now belongs to this project. The three widgets
+it came with (`utc-week`, `retry-backoff`, `sql-erd`) are worked examples. Keep them as references,
 delete them, or replace them with widgets about this project's own ideas.
 
 ## Layout
@@ -24,7 +28,7 @@ delete them, or replace them with widgets about this project's own ideas.
 | `src/index.tsx` | The registry (`WIDGETS`) and the `mount` / `unmountAll` / `names` API the viewer calls |
 | `src/kit.tsx` | Shared pieces: `Presets`, `Facts`, `Note`, `ModelNote` |
 | `src/widgets/*.tsx` | One component per widget, plus `widgets.test.tsx` |
-| `src/models/*.ts` | Pure logic a widget draws, each with a `*.test.ts` |
+| `src/models/*.ts` | Pure logic a widget draws, each with a `*.test.ts`. `ddl.ts`, `schema.ts` and `layout.ts` serve `sql-erd`: they read SQL, review the design and place the tables, and work for any schema |
 | `src/widgets.css` | Styles, built on the viewer's CSS variables so both themes work |
 
 ## Add a widget

@@ -1,5 +1,5 @@
 /**
- * The browser gates on real bundles: the demo (diagram, callouts, quizzes, both example
+ * The browser gates on real bundles: the demo (diagram, callouts, quizzes, the example
  * widgets) and the error fixture (malformed quiz questions and callouts, counted against
  * render_expect). Needs playwright's Chromium, mmdc, and network access for the viewer's CDN.
  * Run with npm run test:render.
@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import { describe, it } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -39,8 +40,55 @@ describe('render gates', { timeout: 600_000 }, () => {
       '--strict',
     ]);
     assert.equal(r.code, 0, r.out);
-    assert.match(r.out, /widgets respond\s+: 2 of 2/);
+    assert.match(r.out, /widgets respond\s+: 3 of 3/);
     assert.match(r.out, /pan\/zoom wired\s+: yes/);
+  });
+
+  // The gate above proves the sql-erd widget mounts and responds, which it also does on its
+  // built-in sample. This proves the SQL written under the widget name reaches it.
+  it('hands the SQL in a widget block to the widget', async (t) => {
+    const { chromium } = await import('playwright');
+    const require = createRequire(import.meta.url);
+    const libs: Record<string, [string, string]> = {
+      'cytoscape@': ['cytoscape', 'dist/cytoscape.min.js'],
+      'marked@': ['marked', 'marked.min.js'],
+      'mermaid@': ['mermaid', 'dist/mermaid.min.js'],
+    };
+    const local = (url: string) => {
+      const hit = Object.keys(libs).find((key) => url.includes(key));
+      if (!hit) return null;
+      const [pkg, file] = libs[hit]!;
+      const entry = require.resolve(pkg);
+      const marker = `${path.sep}node_modules${path.sep}${pkg}${path.sep}`;
+      return fs.readFileSync(path.join(entry.slice(0, entry.lastIndexOf(marker) + marker.length), file), 'utf8');
+    };
+    let browser;
+    try {
+      browser = await chromium.launch({ headless: true, executablePath: process.env.OKF_CHROMIUM || undefined });
+    } catch (e) {
+      return t.skip(`no browser: ${e instanceof Error ? e.message.split('\n')[0] : e}`);
+    }
+    try {
+      const out = path.resolve(ROOT, '.cache', 'demo-erd.html');
+      const built = run([path.join(ASSETS, 'okf-view.mts'), 'examples/demo/okf', '--out', out, '--widgets', WIDGETS]);
+      assert.equal(built.code, 0, built.out);
+      const page = await browser.newPage();
+      const errors: string[] = [];
+      page.on('pageerror', (e) => errors.push(e.message));
+      await page.route(/^https:/, (route) => {
+        const body = local(route.request().url());
+        return body ? route.fulfill({ contentType: 'text/javascript', body }) : route.continue();
+      });
+      await page.goto(`file://${out}#parcel-tracker/data-model`);
+      const diagram = page.locator('figure.okfw[data-widget="sql-erd"] svg[role="img"]');
+      await diagram.waitFor({ timeout: 20_000 });
+      assert.match((await diagram.getAttribute('aria-label')) ?? '', /3 tables and 2 relationships/);
+      await page.getByRole('button', { name: 'Parcel ops' }).click();
+      assert.match((await diagram.getAttribute('aria-label')) ?? '', /13 tables and 17 relationships/);
+      assert.deepEqual(errors, []);
+    } finally {
+      await browser.close();
+    }
   });
 
   it('shows the authoring mistakes in the error fixture', () => {

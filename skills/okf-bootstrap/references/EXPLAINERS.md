@@ -103,7 +103,8 @@ retry-backoff
 ```
 ````
 
-The viewer mounts the React component registered under that name in
+The first line is the widget's name. Anything below it is data for that widget, and most
+widgets take none. The viewer mounts the React component registered under that name in
 `packages/okf-widgets/src/index.tsx` (a workspace package, built to one IIFE and inlined into
 `viz.html`, so the viewer stays a single file). The package's `README.md` has the step-by-step
 for adding one. The two widgets it ships with are **worked examples**, not a library: the
@@ -134,6 +135,46 @@ package belongs to the project once scaffolded, and its widgets should be about 
   is dead.
 - **Both themes.** Style only with the viewer's CSS variables (`--surface`, `--border`,
   `--accent`, `--text-muted`, ...) via the classes in `widgets.css`.
+
+### SQL schemas: the `sql-erd` widget
+
+A Mermaid `erDiagram` shows the shape; it cannot say whether the design is any good, how two
+tables join, or what a delete does. For a schema that is complicated (more than a handful of
+tables, or several relationships per table), or whenever the reader asks, put the schema's SQL
+under the widget name. Every ER diagram still gets its generated key (`okf:fix`); the widget is
+in addition, not instead.
+
+````markdown
+```widget
+sql-erd
+-- scenario: Parcel tracker | The three tables the service runs on today.
+CREATE TABLE carrier (id text PRIMARY KEY, name text NOT NULL UNIQUE);
+CREATE TABLE parcel (id uuid PRIMARY KEY, carrier_id text NOT NULL REFERENCES carrier (id));
+
+-- scenario: Parcel ops | The same service grown into a depot network.
+CREATE TABLE depot (...);
+```
+````
+
+- **Scenarios**: each `-- scenario: Title | blurb` comment starts one, so the block stays valid
+  SQL. Write a small one (a parcel tracker, a small business) and a grown-up one (parcel
+  operations, a large business); the larger one marks the tables the first did not have.
+  With no marker the whole block is one scenario.
+- **Copy the real schema**: `CREATE TABLE`, `CREATE [UNIQUE] INDEX` and
+  `ALTER TABLE ... ADD FOREIGN KEY` are read; everything else is skipped, so a dump works. The
+  diagram's ends come from the constraints: NOT NULL key is `||`, nullable is `|o`, a unique
+  key is one-to-one.
+- **Design review**: green for what is well designed, amber for what is not, each with the
+  rule behind it (entity and referential integrity, indexed keys, junction tables, 1NF
+  repeating groups, 3NF copied attributes, exact money, time zones). They are heuristics:
+  check a finding against the real schema before the text around the widget relies on it.
+- **Join path** writes the SQL between two tables and warns where rows multiply. **Delete
+  impact** follows `ON DELETE` to show what cascades, what is nulled and what is refused.
+- **Switch off a safeguard** (foreign keys, indexes) and **Edit the SQL** let the reader break
+  the schema and watch the review fail, which teaches more than the passing version.
+
+Write the concept text around it the usual way: what to try, then a `[!tip] What to notice`.
+If the schema in the SQL and the diagram above it can disagree, say which one is the source.
 
 ### Checks
 

@@ -32,11 +32,15 @@ project's `.js` files are loaded.
 ```jsonc
 "scripts": {
   "okf:validate":       "node scripts/okf-view.mts okf --validate",
+  "okf:fix":            "node scripts/okf-view.mts okf --validate --fix",
   "okf:view":           "node scripts/okf-view.mts okf",
   "okf:mermaid":        "node scripts/okf-mermaid.mts okf",
   "okf:mermaid:render": "node scripts/okf-view.mts okf --check-render"
 }
 ```
+
+`okf:fix` is not a gate: it rewrites the bundle's markdown so every ` ```mermaid ` `erDiagram`
+has its generated relationship key below it. `okf:validate` fails until it has been run.
 
 With widgets (`--widgets`), the package is an npm workspace and is built first:
 

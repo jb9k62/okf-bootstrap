@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **ER diagram keys**: every Mermaid `erDiagram` is followed by a
+  small generated key (what `||--o{` mean, the line style, `PK`/`FK`, one relationship read out
+  in words), written into the markdown between `<!-- okf:erd-legend -->` markers. `okf:validate`
+  reports a missing or out-of-date key as an `erd-legend` issue, and the new `okf:fix` script
+  (`okf-view.mts --fix`) writes or refreshes every key, so no agent has to remember it. The demo's
+  data model has one.
+- **`sql-erd` widget**: a micro-world for a SQL schema, for complicated schemas or on request.
+  Put the `CREATE TABLE` statements under the widget name in the ` ```widget ` block. It shows
+  scenarios (`-- scenario: Title | blurb`; a small schema, then the same business grown large,
+  with the new tables marked), a diagram whose crow's-foot ends are derived from NOT NULL and
+  UNIQUE, a design review (green for what is well designed, amber for what is not, each with the
+  rule behind it), the join path between two tables as SQL with a warning where rows multiply,
+  and the delete impact of a row (cascade, set null, refused). Two safeguards (foreign keys,
+  indexes) switch off, and the SQL is editable, so the reader can break the schema and watch the
+  review fail. The demo's data model has it, with a parcel tracker and a parcel ops scenario.
+- **Widgets take data**: the first line of a ` ```widget ` block is still the name; the text
+  below it now reaches the widget as `source` (`mount(element, name, source)`). Existing
+  widgets and blocks are unaffected.
 - **README** rewritten around screenshots of the viewer, a widget (before and after one click)
   and a quiz, in light and dark.
 - **`npm run screenshots`** (`scripts/screenshots.mts`) regenerates `docs/images` from the

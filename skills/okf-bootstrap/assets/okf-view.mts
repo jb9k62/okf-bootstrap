@@ -546,6 +546,13 @@ ${CSS}
   <div class="controls">
     <input id="search" type="search" placeholder="Filter by title, path or tag" aria-label="Filter the graph">
     <select id="filter-type" aria-label="Filter by type"><option value="">All types</option></select>
+    <select id="layout" aria-label="Graph layout">
+      <option value="cose">Force (cose)</option>
+      <option value="concentric">Concentric (hubs in centre)</option>
+      <option value="breadthfirst">Breadth-first (hierarchy)</option>
+      <option value="circle">Circle</option>
+      <option value="grid">Grid</option>
+    </select>
     <button id="reset" type="button">Reset</button>
     <button id="reading-toggle" type="button" aria-pressed="false">Reading view</button>
     <button id="theme-toggle" type="button">Dark theme</button>
@@ -1127,11 +1134,20 @@ const JS = `
     ];
   }
 
+  function layoutOptions(name) {
+    const base = { name, animate: false, padding: 40, nodeDimensionsIncludeLabels: true };
+    if (name === "cose") return { ...base, nodeRepulsion: () => 60000, idealEdgeLength: () => 70, nodeOverlap: 20, randomize: false };
+    // Most linked-to concepts go first, so hubs sit at the centre or the top.
+    if (name === "concentric") return { ...base, minNodeSpacing: 30, concentric: (n) => n.indegree(), levelWidth: () => 1 };
+    if (name === "breadthfirst") return { ...base, directed: true, spacingFactor: 1.1, roots: cy.nodes().filter((n) => n.indegree() === 0) };
+    return base;
+  }
+
   const cy = cytoscape({
     container: $("graph"),
     elements: [...bundle.nodes, ...bundle.edges],
     style: graphStyle(),
-    layout: { name: "cose", animate: false, padding: 40, nodeDimensionsIncludeLabels: true, nodeRepulsion: () => 60000, idealEdgeLength: () => 70, nodeOverlap: 20, randomize: false },
+    layout: layoutOptions("cose"),
     minZoom: 0.3,
     maxZoom: 2.5,
   });
@@ -1862,6 +1878,11 @@ const JS = `
   }
   $("search").addEventListener("input", applyFilters);
   $("filter-type").addEventListener("change", applyFilters);
+
+  $("layout").addEventListener("change", () => {
+    cy.layout(layoutOptions($("layout").value)).run();
+    cy.fit(undefined, 40);
+  });
 
   $("reset").addEventListener("click", () => {
     $("search").value = "";

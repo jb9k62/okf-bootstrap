@@ -9,6 +9,8 @@
 - **Demo** grown into the "Parcel tracker" bundle: 13 concepts (overview, architecture, data
   model, API, metric, runbook, three ADRs, two tours) showing types, trust tiers, a draft and
   a stale concept.
+- **Viewer**: layout dropdown restored (force, concentric, breadth-first, circle, grid), as in
+  the reference viewer.
 - **Viewer**: Mermaid edge labels sit on the canvas colour in dark mode instead of grey boxes.
 
 ## 0.3.0 - 2026-09-30

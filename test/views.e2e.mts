@@ -130,11 +130,15 @@ describe('viewer views', { timeout: 120_000 }, () => {
     const total = await page.evaluate('window.__OKF_VIEW__.ids.length');
     await page.click('[data-view=tree]');
     assert.equal(await page.locator('#tree .tree-item').count(), total);
-    await page.locator('#tree .tree-item').nth(2).click();
-    const hash: string = await page.evaluate('decodeURIComponent(location.hash.slice(1))');
-    assert.ok(hash.length > 0);
-    const current = await page.getAttribute('#tree .tree-item[aria-current=true]', 'href');
-    assert.equal(current, '#' + hash, 'the opened concept is highlighted');
+    const item = page.locator('#tree .tree-item').nth(2);
+    const href = await item.getAttribute('href');
+    await item.click();
+    // The viewer follows the URL hash, which changes the concept on the next hashchange event.
+    await page.waitForFunction(
+      (h) => document.querySelector('#tree .tree-item[aria-current=true]')?.getAttribute('href') === h,
+      href,
+    );
+    assert.equal(await page.evaluate('"#" + decodeURIComponent(location.hash.slice(1))'), href);
     assert.ok((await page.locator('#legend').isVisible()), 'the colour key is visible in the tree');
     await page.click('[data-view=graph]');
   });

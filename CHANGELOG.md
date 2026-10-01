@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Four computer-science widgets**, with tours in the demo: `cache-policy` (FIFO, LRU, LFU and
+  the unbuildable optimum on one trace, with Belady's anomaly), `http-concurrency` (a waterfall
+  of connections, handshakes and dependent requests; reads its requests from the block),
+  `css-specificity` (the cascade's tie-breakers: `!important`, inline, layers, specificity,
+  order; reads its rules from the block) and `bloom-filter` (the bits, the false-positive
+  rate against its formula, and why a "yes" must be checked). Each has a pure model pinned by
+  tests.
+- **Widget kit**: `useWorld` keeps a widget's state and presets together (editing clears the
+  active preset), plus `Choice`, `Slider`, `Toggle`, `BarChart` and `SourceProblem`.
+  `models/source.ts` gives data-driven widgets one line convention. `retry-backoff` now uses
+  the kit. The render test counts the demo's widget blocks instead of a fixed number.
 - **ER diagram keys**: every Mermaid `erDiagram` is followed by a
   small generated key (what `||--o{` mean, the line style, `PK`/`FK`, one relationship read out
   in words), written into the markdown between `<!-- okf:erd-legend -->` markers. `okf:validate`

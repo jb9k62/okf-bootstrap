@@ -40,7 +40,13 @@ describe('render gates', { timeout: 600_000 }, () => {
       '--strict',
     ]);
     assert.equal(r.code, 0, r.out);
-    assert.match(r.out, /widgets respond\s+: 3 of 3/);
+    // Every ```widget block in the demo, so adding a widget to a tour needs no edit here.
+    const demo = path.join(ROOT, 'examples', 'demo', 'okf');
+    const blocks = (fs.readdirSync(demo, { recursive: true }) as string[])
+      .filter((file) => file.endsWith('.md'))
+      .reduce((n, file) => n + (fs.readFileSync(path.join(demo, file), 'utf8').match(/^```widget$/gm) ?? []).length, 0);
+    assert.ok(blocks >= 7, 'the demo should exercise every example widget');
+    assert.match(r.out, new RegExp(`widgets respond\\s+: ${blocks} of ${blocks}`));
     assert.match(r.out, /pan\/zoom wired\s+: yes/);
   });
 

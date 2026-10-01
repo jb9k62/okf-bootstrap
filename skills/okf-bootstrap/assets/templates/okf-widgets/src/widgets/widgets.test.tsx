@@ -1,6 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import BloomFilter from './BloomFilter.tsx';
+import CachePolicy from './CachePolicy.tsx';
+import CssSpecificity from './CssSpecificity.tsx';
+import HttpConcurrency from './HttpConcurrency.tsx';
 import RetryBackoff from './RetryBackoff.tsx';
 import SqlErd from './SqlErd.tsx';
 import UtcWeek from './UtcWeek.tsx';
@@ -134,5 +138,87 @@ describe('SqlErd', () => {
     unmount();
     render(<SqlErd source="SELECT 1;" />);
     expect(screen.getByRole('status')).toHaveTextContent('No CREATE TABLE statement found');
+  });
+});
+
+describe('CachePolicy', () => {
+  it("shows Belady's anomaly in the comparison, and LFU surviving a scan", async () => {
+    render(<CachePolicy />);
+    const table = screen.getByTestId('cache-compare');
+    expect(within(table).getByText('FIFO').closest('tr')).toHaveTextContent('25%17% (worse)');
+    expect(screen.getByRole('status')).toHaveTextContent('More room made FIFO worse');
+    await userEvent.click(screen.getByRole('button', { name: 'A scan pushes out the hot keys' }));
+    const lruRate = screen.getByTestId('cache-result').textContent;
+    await userEvent.click(screen.getByRole('button', { name: 'LFU' }));
+    expect(screen.getByTestId('cache-result').textContent).not.toBe(lruRate);
+  });
+
+  it('reruns on an edited trace', () => {
+    render(<CachePolicy />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Request trace' }), {
+      target: { value: 'a a a a' },
+    });
+    expect(screen.getByTestId('cache-result')).toHaveTextContent('75%');
+  });
+});
+
+describe('HttpConcurrency', () => {
+  it('stops improving when nothing queues, and warns that the rest is handshakes', async () => {
+    render(<HttpConcurrency source="" />);
+    const result = screen.getByTestId('http-result');
+    expect(result).toHaveTextContent('Floor');
+    await userEvent.click(screen.getByRole('button', { name: 'Unlimited connections' }));
+    expect(screen.getAllByRole('status')[0]).toHaveTextContent('cannot help');
+    await userEvent.click(screen.getByRole('button', { name: /HTTP\/2/ }));
+    expect(result).toHaveTextContent('Connections opened1');
+  });
+
+  it('draws the requests the concept gives it, and says what is wrong with them', () => {
+    const { unmount } = render(<HttpConcurrency source={'a 100\nb 100 after=a'} />);
+    expect(screen.getByTestId('http-result')).toHaveTextContent('Floor');
+    expect(screen.getAllByText('b').length).toBeGreaterThan(0);
+    unmount();
+    render(<HttpConcurrency source={'a 100\nbroken'} />);
+    expect(screen.getByText(/line 2/)).toBeInTheDocument();
+  });
+});
+
+describe('CssSpecificity', () => {
+  it('lets one id beat ten classes, then lets !important beat the id', async () => {
+    render(<CssSpecificity source="" />);
+    const ranked = screen.getByTestId('css-ranked');
+    expect(within(ranked).getAllByRole('listitem')[0]).toHaveTextContent('#status(1, 0, 0)wins');
+    await userEvent.click(screen.getByRole('button', { name: '!important beats an id' }));
+    expect(within(ranked).getAllByRole('listitem')[0]).toHaveTextContent('.badge(0, 1, 0) !importantwins');
+  });
+
+  it('takes rules from the concept, and flags a selector it cannot read', async () => {
+    render(<CssSpecificity source={'.a | royalblue\n#b | crimson | layer=1'} />);
+    const ranked = screen.getByTestId('css-ranked');
+    // A layered id loses to an unlayered class.
+    expect(within(ranked).getAllByRole('listitem')[0]).toHaveTextContent('.a');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Selector 1' }), { target: { value: 'a, b' } });
+    expect(screen.getByText(/one at a time/)).toBeInTheDocument();
+    expect(within(ranked).getAllByRole('listitem')).toHaveLength(1);
+  });
+
+  it('refuses data it cannot read', () => {
+    render(<CssSpecificity source="just-a-selector" />);
+    expect(screen.getByText(/Could not read this widget/)).toBeInTheDocument();
+  });
+});
+
+describe('BloomFilter', () => {
+  it('answers a stranger "definitely not", and fills up when overloaded', async () => {
+    render(<BloomFilter />);
+    const answer = screen.getByTestId('bloom-answer');
+    expect(answer).toHaveTextContent('Probably seen');
+    fireEvent.change(screen.getByRole('textbox', { name: 'Key to look up' }), {
+      target: { value: 'evt-999' },
+    });
+    expect(answer).toHaveTextContent('Definitely not seen');
+    await userEvent.click(screen.getByRole('button', { name: 'Far too many keys' }));
+    expect(answer).toHaveTextContent('false positive');
+    expect(screen.getByTestId('bloom-result')).toHaveTextContent(/Bits set(9\d|100)%/);
   });
 });

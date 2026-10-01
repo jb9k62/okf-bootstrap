@@ -5,40 +5,30 @@
  * remove it, which is the most useful move a widget can offer.
  */
 
-import { useState } from 'react';
-import { Facts, ModelNote, Note, Presets } from '../kit.tsx';
+import { BarChart, Facts, ModelNote, Note, Presets, Slider, Toggle, useWorld, type WorldPreset } from '../kit.tsx';
 import { crowd, delayFor, type BackoffSettings } from '../models/backoff.ts';
 
 const BUCKET_MS = 50;
 
-interface Preset {
-  id: string;
-  label: string;
-  settings: BackoffSettings;
-  clients: number;
-  note: string;
-}
+type State = BackoffSettings & { clients: number };
 
-const PRESETS: readonly Preset[] = [
+const PRESETS: readonly WorldPreset<State>[] = [
   {
     id: 'herd',
     label: 'No jitter: the thundering herd',
-    settings: { baseMs: 500, retries: 5, capMs: null, jitter: false },
-    clients: 100,
+    state: { baseMs: 500, retries: 5, capMs: null, jitter: false, clients: 100 },
     note: 'Every client computes the same delays, so all 100 retries of each round land in the same instant. Backoff alone spaces the rounds out, not the clients.',
   },
   {
     id: 'jitter',
     label: 'Full jitter',
-    settings: { baseMs: 500, retries: 5, capMs: null, jitter: true },
-    clients: 100,
+    state: { baseMs: 500, retries: 5, capMs: null, jitter: true, clients: 100 },
     note: 'Each delay is random between zero and the computed delay. The same retries are now spread out, and the peak drops to about a quarter. Jitter needs room: with delays that are short next to the spike, it has almost nowhere to spread the clients.',
   },
   {
     id: 'uncapped',
     label: 'Eight retries, no cap',
-    settings: { baseMs: 500, retries: 8, capMs: null, jitter: true },
-    clients: 100,
+    state: { baseMs: 500, retries: 8, capMs: null, jitter: true, clients: 100 },
     note: 'Doubling adds up: the last retry waits 64 s on its own. A cap bounds how long a client can go quiet.',
   },
 ];
@@ -46,48 +36,18 @@ const PRESETS: readonly Preset[] = [
 const seconds = (ms: number) => `${(ms / 1000).toFixed(1)} s`;
 
 export default function RetryBackoff() {
-  const first = PRESETS[0]!;
-  const [settings, setSettings] = useState<BackoffSettings>(first.settings);
-  const [clients, setClients] = useState(first.clients);
-  const [presetId, setPresetId] = useState<string | null>(first.id);
-
+  const world = useWorld(PRESETS);
+  const settings = world.state;
+  const { clients } = settings;
   const result = crowd(settings, clients, BUCKET_MS);
-  const preset = PRESETS.find((candidate) => candidate.id === presetId) ?? null;
-  const change = (next: Partial<BackoffSettings>) => {
-    setSettings({ ...settings, ...next });
-    setPresetId(null);
-  };
 
   return (
     <div>
-      <Presets
-        presets={PRESETS}
-        active={presetId}
-        probe="jitter"
-        onChoose={(candidate) => {
-          setSettings(candidate.settings);
-          setClients(candidate.clients);
-          setPresetId(candidate.id);
-        }}
-      />
+      <Presets presets={PRESETS} active={world.preset?.id ?? null} probe="jitter" onChoose={world.choose} />
 
       <div className="okfw-columns">
         <section>
-          <label className="okfw-row">
-            Clients{' '}
-            <input
-              type="range"
-              aria-label="Clients"
-              min={1}
-              max={200}
-              value={clients}
-              onChange={(event) => {
-                setClients(Number(event.target.value));
-                setPresetId(null);
-              }}
-            />{' '}
-            {clients}
-          </label>
+          <Slider label="Clients" value={clients} min={1} max={200} onChange={(value) => world.set({ clients: value })} />
           <label className="okfw-row">
             Retries{' '}
             <input
@@ -97,27 +57,21 @@ export default function RetryBackoff() {
               max={10}
               value={settings.retries}
               onChange={(event) =>
-                change({ retries: Math.min(10, Math.max(1, Number(event.target.value) || 1)) })
+                world.set({ retries: Math.min(10, Math.max(1, Number(event.target.value) || 1)) })
               }
             />
           </label>
-          <label className="okfw-toggle">
-            <input
-              type="checkbox"
-              checked={settings.jitter}
-              onChange={(event) => change({ jitter: event.target.checked })}
-            />{' '}
-            Full jitter
-            <span className="okfw-reason">each delay is random in [0, delay)</span>
-          </label>
-          <label className="okfw-toggle">
-            <input
-              type="checkbox"
-              checked={settings.capMs !== null}
-              onChange={(event) => change({ capMs: event.target.checked ? 2000 : null })}
-            />{' '}
-            Cap each delay at 2 s
-          </label>
+          <Toggle
+            label="Full jitter"
+            reason="each delay is random in [0, delay)"
+            checked={settings.jitter}
+            onChange={(jitter) => world.set({ jitter })}
+          />
+          <Toggle
+            label="Cap each delay at 2 s"
+            checked={settings.capMs !== null}
+            onChange={(capped) => world.set({ capMs: capped ? 2000 : null })}
+          />
         </section>
         <section>
           <h4>Delay before each retry (before jitter)</h4>
@@ -132,14 +86,7 @@ export default function RetryBackoff() {
       </div>
 
       <h4>Retries reaching the server, per {BUCKET_MS} ms</h4>
-      <div className="okfw-bars" aria-hidden="true">
-        {result.buckets.map((count, index) => (
-          <span
-            key={index}
-            style={{ height: `${result.peak ? (count / result.peak) * 100 : 0}%` }}
-          />
-        ))}
-      </div>
+      <BarChart values={result.buckets} />
       <Facts
         testId="backoff-result"
         rows={[
@@ -160,7 +107,7 @@ export default function RetryBackoff() {
           Every client retries in lockstep, so each round hits the server as one spike.
         </Note>
       )}
-      {preset && <Note>{preset.note}</Note>}
+      {world.preset && <Note>{world.preset.note}</Note>}
       <ModelNote>
         A model: <code>models/backoff.ts</code>, with a seeded random source so the same
         settings always draw the same crowd.

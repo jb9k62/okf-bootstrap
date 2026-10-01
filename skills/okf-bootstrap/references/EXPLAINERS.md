@@ -107,7 +107,7 @@ The first line is the widget's name. Anything below it is data for that widget, 
 widgets take none. The viewer mounts the React component registered under that name in
 `packages/okf-widgets/src/index.tsx` (a workspace package, built to one IIFE and inlined into
 `viz.html`, so the viewer stays a single file). The package's `README.md` has the step-by-step
-for adding one. The two widgets it ships with are **worked examples**, not a library: the
+for adding one. The widgets it ships with are **worked examples**, not a library: the
 package belongs to the project once scaffolded, and its widgets should be about the project.
 
 ### What makes a good widget
@@ -130,6 +130,13 @@ package belongs to the project once scaffolded, and its widgets should be about 
   on each render. Seed any randomness, so the same settings always show the same picture.
 - **Visible invariants.** When the reader breaks an invariant, say so with a `Note tone="warn"`
   (`role="status"`), so tests and screen readers see it too.
+- **One state object, from `useWorld`.** Presets carry the whole state they jump to and the
+  note that explains it; editing anything clears the active preset, so a note never describes
+  a state the reader has left.
+- **Take data from the block when the idea is general.** A widget about requests, rules or
+  keys reads them from the lines under its name (`dataLines` and `cells` in `models/source.ts`:
+  one record per line, `--` comments), so one widget serves many concepts. Say which line and
+  what was expected when a line is wrong (`SourceProblem`), and keep a built-in default.
 - **One `data-probe` control** (the `probe` prop of `Presets`). The render gate clicks it and
   fails the build if the widget's text does not change, which catches a widget that mounts but
   is dead.

@@ -21,6 +21,10 @@ import {
 } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import styles from './widgets.css?inline';
+import BloomFilter from './widgets/BloomFilter.tsx';
+import CachePolicy from './widgets/CachePolicy.tsx';
+import CssSpecificity from './widgets/CssSpecificity.tsx';
+import HttpConcurrency from './widgets/HttpConcurrency.tsx';
 import RetryBackoff from './widgets/RetryBackoff.tsx';
 import SqlErd from './widgets/SqlErd.tsx';
 import UtcWeek from './widgets/UtcWeek.tsx';
@@ -42,6 +46,22 @@ export const WIDGETS: Readonly<
   'sql-erd': {
     title: 'Try it: explore this schema',
     component: SqlErd,
+  },
+  'cache-policy': {
+    title: 'Try it: what does the cache keep?',
+    component: CachePolicy,
+  },
+  'http-concurrency': {
+    title: 'Try it: how many requests at once?',
+    component: HttpConcurrency,
+  },
+  'css-specificity': {
+    title: 'Try it: which rule wins?',
+    component: CssSpecificity,
+  },
+  'bloom-filter': {
+    title: 'Try it: a set that forgets what it holds',
+    component: BloomFilter,
   },
 };
 

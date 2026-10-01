@@ -1293,6 +1293,22 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
   background: var(--bg);
 }
 .prose .mermaid.expanded .mermaid-canvas { background: var(--surface); }
+/* The ER diagram key (see drawErdKeys) shows only over the expanded diagram, as a panel in its corner. */
+.prose .callout.erd-key { display: none; }
+.prose .mermaid.expanded + .callout.erd-key {
+  display: block;
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 61;
+  max-width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  margin: 0;
+  font-size: 13px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+  background: var(--surface);
+}
 
 /* Backlinks */
 #detail-backlinks { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 15px; }
@@ -1780,6 +1796,11 @@ const JS = `
   function drawErdKeys(root) {
     for (const title of root.querySelectorAll(".callout .callout-title")) {
       if (title.textContent.trim() !== "Reading the diagram") continue;
+      // The key belongs to the diagram right above it, and shows only while that diagram is
+      // expanded (see .erd-key in the styles). Without such a diagram it stays in the page.
+      const callout = title.closest(".callout");
+      const above = callout.previousElementSibling;
+      if (above && above.matches("pre") && above.querySelector("code.language-mermaid")) callout.classList.add("erd-key");
       for (const code of [...title.parentElement.querySelectorAll("code")]) {
         const text = code.textContent;
         const parts = text.split(" ");

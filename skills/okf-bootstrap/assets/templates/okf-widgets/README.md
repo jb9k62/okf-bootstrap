@@ -31,6 +31,9 @@ came with are worked examples, each about one idea:
 | `http-concurrency` | Concurrency stops helping at the critical path; connections cost handshakes | `concurrency.ts` |
 | `css-specificity` | The cascade's tie-breakers, and specificity counts in columns | `specificity.ts` |
 | `bloom-filter` | "No" is certain, "yes" is only likely, and the bits fill up | `bloom.ts` |
+| `rate-limiter` | A fixed window lets twice its limit through at the boundary | `ratelimit.ts` |
+| `binary-search` | Halving beats scanning, but only on a sorted list | `search.ts` |
+| `consistent-hash` | A ring moves a fraction of keys when a server joins; `hash % n` moves most | `ring.ts` |
 
  Keep them as references,
 delete them, or replace them with widgets about this project's own ideas.
@@ -40,7 +43,7 @@ delete them, or replace them with widgets about this project's own ideas.
 | Path | What goes there |
 | --- | --- |
 | `src/index.tsx` | The registry (`WIDGETS`) and the `mount` / `unmountAll` / `names` API the viewer calls |
-| `src/kit.tsx` | Shared pieces: `useWorld` (state plus presets), `Presets`, `Choice`, `Slider`, `Toggle`, `BarChart`, `Facts`, `Note`, `ModelNote`, `SourceProblem` |
+| `src/kit.tsx` | Shared pieces: `useWorld` (state plus presets), `Presets`, `Choice`, `Slider`, `Toggle`, `BarChart`, `Scrubber`, `Facts`, `Note`, `ModelNote`, `SourceProblem` |
 | `src/widgets/*.tsx` | One component per widget, plus `widgets.test.tsx` |
 | `src/models/*.ts` | Pure logic a widget draws, each with a `*.test.ts`. `ddl.ts`, `schema.ts` and `layout.ts` serve `sql-erd`: they read SQL, review the design and place the tables, and work for any schema. `source.ts` reads the block's data lines |
 | `src/widgets.css` | Styles, built on the viewer's CSS variables so both themes work |

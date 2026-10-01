@@ -40,12 +40,19 @@ describe('render gates', { timeout: 600_000 }, () => {
       '--strict',
     ]);
     assert.equal(r.code, 0, r.out);
-    // Every ```widget block in the demo, so adding a widget to a tour needs no edit here.
+    // Every ```widget block in the demo, so adding a widget to a tour needs no edit here, and
+    // every registered widget must have one, or the gate would never mount it.
     const demo = path.join(ROOT, 'examples', 'demo', 'okf');
-    const blocks = (fs.readdirSync(demo, { recursive: true }) as string[])
-      .filter((file) => file.endsWith('.md'))
-      .reduce((n, file) => n + (fs.readFileSync(path.join(demo, file), 'utf8').match(/^```widget$/gm) ?? []).length, 0);
-    assert.ok(blocks >= 7, 'the demo should exercise every example widget');
+    const used: string[] = [];
+    for (const file of (fs.readdirSync(demo, { recursive: true }) as string[]).filter((f) => f.endsWith('.md'))) {
+      const text = fs.readFileSync(path.join(demo, file), 'utf8');
+      for (const m of text.matchAll(/^```widget\n(\S+)/gm)) used.push(m[1]!);
+    }
+    const registry = fs.readFileSync(path.join(ASSETS, 'templates', 'okf-widgets', 'src', 'index.tsx'), 'utf8');
+    const registered = [...registry.matchAll(/^ {2}'([a-z-]+)': \{/gm)].map((m) => m[1]!);
+    assert.ok(registered.length >= 10, `found the registry's widgets: ${registered}`);
+    for (const name of registered) assert.ok(used.includes(name), `the demo has no tour using widget ${name}`);
+    const blocks = used.length;
     assert.match(r.out, new RegExp(`widgets respond\\s+: ${blocks} of ${blocks}`));
     assert.match(r.out, /pan\/zoom wired\s+: yes/);
   });

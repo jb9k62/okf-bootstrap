@@ -218,3 +218,42 @@ export function Choice<T extends string>({
     </div>
   );
 }
+
+/**
+ * Step through a sequence one item at a time (requests, comparisons, frames). The slider and the
+ * two buttons all move the same position; `value` is 0-based and `max` is the last position.
+ */
+export function Scrubber({
+  label,
+  value,
+  max,
+  onChange,
+  describe,
+}: {
+  label: string;
+  value: number;
+  max: number;
+  onChange: (value: number) => void;
+  describe?: (value: number) => ReactNode;
+}) {
+  const clamped = Math.min(Math.max(value, 0), Math.max(max, 0));
+  return (
+    <div className="okfw-scrubber">
+      <button type="button" aria-label={`${label}: previous`} disabled={clamped <= 0} onClick={() => onChange(clamped - 1)}>
+        ◀
+      </button>
+      <input
+        type="range"
+        aria-label={label}
+        min={0}
+        max={Math.max(max, 0)}
+        value={clamped}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      <button type="button" aria-label={`${label}: next`} disabled={clamped >= max} onClick={() => onChange(clamped + 1)}>
+        ▶
+      </button>
+      <span className="okfw-scrubber-text">{describe ? describe(clamped) : `${clamped + 1} of ${max + 1}`}</span>
+    </div>
+  );
+}

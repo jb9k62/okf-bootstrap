@@ -672,3 +672,103 @@
 [data-testid='bloom-answer'][data-wrong='true'] {
   color: var(--okfw-bad);
 }
+
+/* Scrubber: step through a sequence */
+.okfw-scrubber {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.okfw-scrubber input[type='range'] {
+  flex: 1 1 160px;
+}
+.okfw-scrubber-text {
+  flex-basis: 100%;
+}
+
+/* rate-limiter */
+.okfw-timeline {
+  height: 34px;
+  margin: 10px 0 4px;
+  overflow: visible;
+}
+.okfw-boundary {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  border-left: 2px dashed var(--border-strong, #cbd5e1);
+}
+.okfw-req {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  width: 4px;
+  margin-left: -2px;
+  border-radius: 2px;
+  background: var(--okfw-bad);
+}
+.okfw-req[data-allowed='true'] {
+  background: var(--okfw-good);
+}
+.okfw-req[data-current] {
+  top: -2px;
+  bottom: -2px;
+  outline: 2px solid var(--heading, #0f172a);
+}
+
+/* binary-search */
+.okfw-cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin: 8px 0;
+}
+.okfw-cells span {
+  min-width: 26px;
+  padding: 3px 4px;
+  text-align: center;
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 3px;
+  color: var(--text-muted, #64748b);
+}
+.okfw-cells span[data-in] {
+  color: var(--heading, #0f172a);
+  background: color-mix(in srgb, var(--accent, #2563eb) 14%, transparent);
+}
+.okfw-cells span[data-seen] {
+  text-decoration: line-through;
+}
+.okfw-cells span[data-now] {
+  outline: 2px solid var(--accent, #2563eb);
+  font-weight: 700;
+}
+.okfw-cells span[data-hit] {
+  background: var(--okfw-good);
+  color: var(--surface, #fff);
+}
+
+/* consistent-hash */
+.okfw-ring {
+  display: block;
+  max-width: 220px;
+  width: 100%;
+  margin: 0 auto;
+}
+.okfw-loads {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 80px;
+  padding: 4px;
+  border: 1px solid var(--border, #e2e8f0);
+  border-radius: 4px;
+  background: var(--surface-2, #f1f5f9);
+}
+.okfw-loads span {
+  flex: 1 1 0;
+  border-radius: 2px 2px 0 0;
+}

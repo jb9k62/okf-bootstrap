@@ -1,10 +1,13 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
+import BinarySearch from './BinarySearch.tsx';
 import BloomFilter from './BloomFilter.tsx';
 import CachePolicy from './CachePolicy.tsx';
+import ConsistentHash from './ConsistentHash.tsx';
 import CssSpecificity from './CssSpecificity.tsx';
 import HttpConcurrency from './HttpConcurrency.tsx';
+import RateLimiter from './RateLimiter.tsx';
 import RetryBackoff from './RetryBackoff.tsx';
 import SqlErd from './SqlErd.tsx';
 import UtcWeek from './UtcWeek.tsx';
@@ -220,5 +223,59 @@ describe('BloomFilter', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Far too many keys' }));
     expect(answer).toHaveTextContent('false positive');
     expect(screen.getByTestId('bloom-result')).toHaveTextContent(/Bits set(9\d|100)%/);
+  });
+});
+
+describe('RateLimiter', () => {
+  it('lets a fixed window pass a double burst, and a sliding window stop it', async () => {
+    render(<RateLimiter />);
+    const result = screen.getByTestId('rate-result');
+    expect(result).toHaveTextContent('Allowed10 of 10');
+    expect(screen.getAllByRole('status')[0]).toHaveTextContent('10 requests inside one window');
+    await userEvent.click(screen.getByRole('button', { name: 'The same burst, sliding window' }));
+    expect(result).toHaveTextContent('Allowed5 of 10');
+    expect(screen.queryByText(/inside one window/)).toBeNull();
+  });
+
+  it('steps through the requests with the scrubber', async () => {
+    render(<RateLimiter />);
+    expect(screen.getByTestId('rate-decision')).toHaveTextContent('allowed');
+    await userEvent.click(screen.getByRole('button', { name: 'Request: next' }));
+    expect(screen.getByText(/2 of 10: at 920 ms/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Request: previous' }));
+    expect(screen.getByText(/1 of 10: at 900 ms/)).toBeInTheDocument();
+  });
+});
+
+describe('BinarySearch', () => {
+  it('needs few looks with binary search and many with linear', async () => {
+    render(<BinarySearch />);
+    const result = screen.getByTestId('search-result');
+    expect(result).toHaveTextContent('found at position 46');
+    expect(result).toHaveTextContent('Comparisons5 (binary search)');
+    await userEvent.click(screen.getByRole('button', { name: 'Linear search, the same list' }));
+    expect(result).toHaveTextContent('Comparisons46 (linear search)');
+  });
+
+  it('says a present value is missing on an unsorted list, and warns', async () => {
+    render(<BinarySearch />);
+    await userEvent.click(screen.getByRole('button', { name: 'Binary search on an unsorted list' }));
+    expect(screen.getByTestId('search-result')).toHaveTextContent('not found');
+    expect(screen.getAllByRole('status').map((n) => n.textContent).join(' ')).toMatch(/not sorted.*linear search finds it/);
+    await userEvent.click(screen.getByRole('button', { name: 'Linear' }));
+    expect(screen.getByTestId('search-result')).toHaveTextContent('found at position 6');
+  });
+});
+
+describe('ConsistentHash', () => {
+  it('moves far fewer keys on the ring than with modulo, and evens out with virtual nodes', async () => {
+    render(<ConsistentHash />);
+    const result = screen.getByTestId('ring-result');
+    expect(screen.getAllByRole('status')[0]).toHaveTextContent('add virtual nodes');
+    await userEvent.click(screen.getByRole('button', { name: '128 virtual nodes each' }));
+    expect(screen.queryByText(/add virtual nodes/)).toBeNull();
+    const moved = /hash ring(\d+)%.*hash % servers(\d+)%/.exec(result.textContent ?? '');
+    expect(moved).not.toBeNull();
+    expect(Number(moved![1])).toBeLessThan(Number(moved![2]) / 2);
   });
 });

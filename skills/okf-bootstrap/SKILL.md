@@ -114,11 +114,11 @@ refreshed, and older `.mjs` copies are removed.
 
 `packages/okf-widgets` is copied into the project and **becomes the project's code**. It ships
 a registry (`src/index.tsx`), a kit (`useWorld`, `Presets`, `Choice`, `Slider`, `Toggle`,
-`Facts`, `BarChart`, `Note`, `ModelNote`, `SourceProblem`), styles built on the viewer's theme
-variables, and eight worked examples with pure, tested models: `utc-week`, `retry-backoff`,
+`Scrubber`, `Facts`, `BarChart`, `Note`, `ModelNote`, `SourceProblem`), styles built on the viewer's theme
+variables, and ten worked examples with pure, tested models: `utc-week`, `retry-backoff`,
 `sql-erd` (takes a schema's SQL from the block), and the computer-science set `cache-policy`,
 `http-concurrency` (takes requests from the block), `css-specificity` (takes rules from the
-block) and `bloom-filter`. Keep the examples as references or delete them; write the project's
+block), `bloom-filter`, `rate-limiter`, `binary-search` and `consistent-hash`. Keep the examples as references or delete them; write the project's
 own widgets next to them, importing the project's real pure code through the `@app` alias
 where possible. Its `README.md` has the step-by-step.
 

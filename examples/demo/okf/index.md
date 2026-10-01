@@ -7,7 +7,7 @@ okf_version: "0.2"
 The knowledge bundle for **Parcel tracker**, a small (fictional) service that follows parcels
 across courier companies and tells customers where their delivery is. It is the demo for
 [okf-bootstrap](https://github.com/jb9k62/okf-bootstrap): reference concepts, decision
-records, and six guided tours with interactive widgets and quizzes. Build it with
+records, and nine guided tours with interactive widgets and quizzes. Build it with
 `npm run demo`, then open `examples/demo/okf/viz.html`.
 
 ## Start here
@@ -22,6 +22,12 @@ records, and six guided tours with interactive widgets and quizzes. Build it wit
   connections, handshakes and the chain of requests that waits for itself
 * [Guided tour: why is the badge the wrong colour?](/tours/css-explainer.md) - the cascade, and
   why one id beats ten classes
+* [Guided tour: who gets through the limiter?](/tours/ratelimit-explainer.md) - three ways to
+  limit requests, and the burst a fixed window lets through
+* [Guided tour: how many looks does it take?](/tours/search-explainer.md) - binary against
+  linear search, and what an unsorted list does to the answer
+* [Guided tour: which server holds this key?](/tours/hashing-explainer.md) - a hash ring against
+  `hash % servers`, and why each server needs many points
 * [Guided tour: have we seen this event?](/tours/bloom-explainer.md) - a Bloom filter's bits,
   and why a "yes" must still be checked
 

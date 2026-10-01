@@ -21,10 +21,13 @@ import {
 } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import styles from './widgets.css?inline';
+import BinarySearch from './widgets/BinarySearch.tsx';
 import BloomFilter from './widgets/BloomFilter.tsx';
 import CachePolicy from './widgets/CachePolicy.tsx';
+import ConsistentHash from './widgets/ConsistentHash.tsx';
 import CssSpecificity from './widgets/CssSpecificity.tsx';
 import HttpConcurrency from './widgets/HttpConcurrency.tsx';
+import RateLimiter from './widgets/RateLimiter.tsx';
 import RetryBackoff from './widgets/RetryBackoff.tsx';
 import SqlErd from './widgets/SqlErd.tsx';
 import UtcWeek from './widgets/UtcWeek.tsx';
@@ -58,6 +61,18 @@ export const WIDGETS: Readonly<
   'css-specificity': {
     title: 'Try it: which rule wins?',
     component: CssSpecificity,
+  },
+  'rate-limiter': {
+    title: 'Try it: who gets through the limiter?',
+    component: RateLimiter,
+  },
+  'binary-search': {
+    title: 'Try it: how many looks does it take?',
+    component: BinarySearch,
+  },
+  'consistent-hash': {
+    title: 'Try it: which server holds this key?',
+    component: ConsistentHash,
   },
   'bloom-filter': {
     title: 'Try it: a set that forgets what it holds',

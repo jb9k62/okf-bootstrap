@@ -47,6 +47,13 @@ describe('false-positive rate', () => {
     expect(Math.abs(measuredRate - expected)).toBeLessThan(0.01);
   });
 
+  it('tracks the formula with one hash too, where a weak hash on similar keys would not', () => {
+    // evt-0, evt-1, ... differ only in their last characters; an unmixed FNV-1a spreads them
+    // badly over the low bits and measured about 14% here against 9.3% by formula.
+    const { measuredRate } = measure(1024, 1, 100, 20000);
+    expect(Math.abs(measuredRate - expectedFalsePositiveRate(1024, 1, 100))).toBeLessThan(0.02);
+  });
+
   it('is minimised near the optimal k', () => {
     const [m, n] = [1024, 100];
     const best = optimalK(m, n);

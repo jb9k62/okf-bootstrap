@@ -79,4 +79,9 @@ describe('parseRequests', () => {
     expect(() => parseRequests(['ok 10', 'bad'])).toThrow(/line 2/);
     expect(() => parseRequests(['x 0'])).toThrow(/line 1/);
   });
+
+  it('refuses a repeated id and a word it does not know, instead of ignoring them', () => {
+    expect(() => parseRequests(['a 10', 'a 20'])).toThrow(/line 2: "a" is already a request/);
+    expect(() => parseRequests(['a 10', 'b 20 afer=a'])).toThrow(/line 2: .*"afer=a"/);
+  });
 });

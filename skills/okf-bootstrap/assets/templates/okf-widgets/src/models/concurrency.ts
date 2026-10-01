@@ -7,6 +7,8 @@
  * before). Past the second, more connections change nothing.
  */
 
+import { SourceError } from './source.ts';
+
 export interface Request {
   id: string;
   /** Time on the wire once started, in ms. */
@@ -136,19 +138,25 @@ export function schedule(requests: readonly Request[], settings: Settings): Sche
 }
 
 /**
- * Read one request per line: `id ms [after=a,b]`. Throws with the line number on a bad line.
+ * Read one request per line: `id ms [after=a,b]`. Throws a SourceError naming the line on a bad
+ * line, a repeated id or a word it does not know, rather than guess what was meant.
  * (The caller supplies data lines already stripped of comments; see source.ts.)
  */
 export function parseRequests(lines: readonly string[]): Request[] {
+  const seen = new Set<string>();
   return lines.map((line, index) => {
     const [id, ms, ...rest] = line.split(/\s+/);
     const number = Number(ms);
     if (!id || !Number.isFinite(number) || number <= 0) {
-      throw new Error(`line ${index + 1}: expected "id ms [after=a,b]", got "${line}"`);
+      throw new SourceError(index + 1, `expected "id ms [after=a,b]", got "${line}"`);
     }
-    const after = rest
-      .filter((word) => word.startsWith('after='))
-      .flatMap((word) => word.slice(6).split(',').filter(Boolean));
+    if (seen.has(id)) throw new SourceError(index + 1, `"${id}" is already a request`);
+    seen.add(id);
+    const unknown = rest.find((word) => !word.startsWith('after='));
+    if (unknown !== undefined) {
+      throw new SourceError(index + 1, `expected "after=a,b" after the time, got "${unknown}"`);
+    }
+    const after = rest.flatMap((word) => word.slice(6).split(',').filter(Boolean));
     return { id, ms: number, after };
   });
 }

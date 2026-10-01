@@ -6,24 +6,11 @@
  * `hash % nodes` almost all of them move, on a ring only about 1/(n+1) do.
  */
 
+import { hash32 } from './hash.ts';
+
 export const RING_SIZE = 2 ** 32;
 
-function fnv1a(text: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  // FNV is weak in the low bits for similar strings; mix before using the position.
-  hash ^= hash >>> 16;
-  hash = Math.imul(hash, 0x85ebca6b) >>> 0;
-  hash ^= hash >>> 13;
-  hash = Math.imul(hash, 0xc2b2ae35) >>> 0;
-  hash ^= hash >>> 16;
-  return hash >>> 0;
-}
-
-export const position = (text: string): number => fnv1a(text);
+export const position = (text: string): number => hash32(text);
 
 export interface Point {
   node: number;

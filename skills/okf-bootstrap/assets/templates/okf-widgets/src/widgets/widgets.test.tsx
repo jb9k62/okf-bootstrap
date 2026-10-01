@@ -184,6 +184,12 @@ describe('HttpConcurrency', () => {
     render(<HttpConcurrency source={'a 100\nbroken'} />);
     expect(screen.getByText(/line 2/)).toBeInTheDocument();
   });
+
+  it('says so when the block has only comments, instead of dividing by zero', () => {
+    render(<HttpConcurrency source={'-- nothing yet'} />);
+    expect(screen.getByText(/no requests/)).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/)).toBeNull();
+  });
 });
 
 describe('CssSpecificity', () => {
@@ -208,6 +214,16 @@ describe('CssSpecificity', () => {
   it('refuses data it cannot read', () => {
     render(<CssSpecificity source="just-a-selector" />);
     expect(screen.getByText(/Could not read this widget/)).toBeInTheDocument();
+  });
+
+  it('refuses an unknown flag rather than dropping it, and keeps a layer above 3', () => {
+    const { unmount } = render(<CssSpecificity source={'.a | red | important'} />);
+    expect(screen.getByText(/line 1: unknown flag "important"/)).toBeInTheDocument();
+    unmount();
+    render(<CssSpecificity source={'.a | red | layer=5\n.b | blue | layer=2'} />);
+    expect(screen.getByRole('combobox', { name: 'Layer 1' })).toHaveDisplayValue('5');
+    expect(within(screen.getByTestId('css-ranked')).getAllByRole('listitem')[0]).toHaveTextContent('layer 5');
+    expect(screen.getByRole('checkbox', { name: '!important 2' })).not.toBeChecked();
   });
 });
 
@@ -235,6 +251,15 @@ describe('RateLimiter', () => {
     await userEvent.click(screen.getByRole('button', { name: 'The same burst, sliding window' }));
     expect(result).toHaveTextContent('Allowed5 of 10');
     expect(screen.queryByText(/inside one window/)).toBeNull();
+  });
+
+  it('does not draw a mark per window for a far-off time, which would hang the page', () => {
+    const { container } = render(<RateLimiter />);
+    fireEvent.change(screen.getByRole('textbox', { name: 'Request times' }), {
+      target: { value: '0 1 2 1000000000' },
+    });
+    expect(container.querySelectorAll('.okfw-boundary')).toHaveLength(0);
+    expect(screen.getByTestId('rate-result')).toHaveTextContent('Allowed4 of 4');
   });
 
   it('steps through the requests with the scrubber', async () => {

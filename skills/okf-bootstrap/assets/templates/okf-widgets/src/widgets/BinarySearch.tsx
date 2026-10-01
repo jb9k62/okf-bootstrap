@@ -48,7 +48,7 @@ export default function BinarySearch() {
   const current = result.steps[at];
   const sorted = isSorted(list);
   const wrong = method === 'binary' && result.found === -1 && linear.found !== -1;
-  const bestCase = Math.ceil(Math.log2(list.length + 1));
+  const worstCase = Math.ceil(Math.log2(list.length + 1));
 
   return (
     <div>
@@ -143,7 +143,7 @@ export default function BinarySearch() {
             result.found === -1 ? <strong>not found</strong> : <strong>found at position {result.found + 1}</strong>,
           ],
           ['Comparisons', `${result.steps.length} (${method} search)`],
-          ['At most', method === 'binary' ? `${bestCase} for ${list.length} items` : `${list.length} for ${list.length} items`],
+          ['At most', method === 'binary' ? `${worstCase} for ${list.length} items` : `${list.length} for ${list.length} items`],
         ]}
       />
       {method === 'binary' && !sorted && (

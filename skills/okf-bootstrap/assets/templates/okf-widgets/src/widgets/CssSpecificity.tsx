@@ -70,7 +70,7 @@ const PRESETS: readonly WorldPreset<State>[] = [
         rule(2, '.badge', 'crimson', { important: true }),
       ],
     },
-    note: '!important is checked before specificity is even looked at. The only thing that beats it is another !important with higher specificity, which is how override wars start.',
+    note: '!important is checked before specificity is even looked at. Only another !important can beat it, and between two of those the usual tie-breakers apply again (inline, layer, specificity, order), which is how override wars start.',
   },
   {
     id: 'inline',
@@ -116,17 +116,27 @@ const REASONS: Record<Reason, string> = {
   order: 'lost on source order',
 };
 
-/** Read `selector | colour | flags` lines into rules. */
+/** Read `selector | colour | flags` lines into rules. An unknown flag is an error, not ignored. */
 function parseRules(source: string): Rule[] {
   return dataLines(source).map((line, index) => {
-    const [selector = '', colour = '', flags = ''] = cells(line);
-    if (!colour) throw new SourceError(index + 1, `expected "selector | colour [| flags]", got "${line}"`);
+    const [selector = '', colour = '', flags = '', ...extra] = cells(line);
+    if (!colour || extra.length > 0) {
+      throw new SourceError(index + 1, `expected "selector | colour [| flags]", got "${line}"`);
+    }
+    let layer = 0;
     const words = flags.split(/\s+/).filter(Boolean);
-    const layer = words.find((word) => word.startsWith('layer='));
+    for (const word of words) {
+      if (word === '!important' || word === 'inline') continue;
+      const rank = /^layer=(\d+)$/.exec(word);
+      if (rank && Number(rank[1]) >= 1) layer = Number(rank[1]);
+      else {
+        throw new SourceError(index + 1, `unknown flag "${word}": use !important, inline or layer=N (N from 1, later layers win)`);
+      }
+    }
     return rule(index + 1, selector, colour, {
       important: words.includes('!important'),
       inline: words.includes('inline'),
-      layer: layer ? Number(layer.slice(6)) || 0 : 0,
+      layer,
     });
   });
 }
@@ -225,6 +235,7 @@ export default function CssSpecificity({ source }: { source: string }) {
             <label>
               <input
                 type="checkbox"
+                aria-label={`!important ${index + 1}`}
                 checked={r.important}
                 onChange={(event) => update(r.key, { important: event.target.checked })}
               />{' '}
@@ -233,6 +244,7 @@ export default function CssSpecificity({ source }: { source: string }) {
             <label>
               <input
                 type="checkbox"
+                aria-label={`Inline ${index + 1}`}
                 checked={r.inline}
                 onChange={(event) => update(r.key, { inline: event.target.checked })}
               />{' '}
@@ -246,9 +258,15 @@ export default function CssSpecificity({ source }: { source: string }) {
                 onChange={(event) => update(r.key, { layer: Number(event.target.value) })}
               >
                 <option value={0}>none</option>
-                <option value={1}>1 (early)</option>
-                <option value={2}>2</option>
-                <option value={3}>3 (late)</option>
+                {[...new Set([1, 2, 3, r.layer])]
+                  .filter((rank) => rank > 0)
+                  .sort((a, b) => a - b)
+                  .map((rank) => (
+                    <option key={rank} value={rank}>
+                      {rank}
+                      {rank === 1 ? ' (early)' : ''}
+                    </option>
+                  ))}
               </select>
             </label>
             <button

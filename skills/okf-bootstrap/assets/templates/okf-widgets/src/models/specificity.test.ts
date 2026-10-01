@@ -24,6 +24,9 @@ describe('parseSelector', () => {
     ['li:is(.a, #b) a', [1, 0, 2]],
     ['li:nth-child(2n + 1)', [0, 1, 1]],
     ['li:nth-child(2n + 1 of .x, #y)', [1, 1, 1]],
+    ['svg|a', [0, 0, 1]],
+    ['*|a.b', [0, 1, 1]],
+    ['svg|*', [0, 0, 0]],
   ])('%s is %j', (selector, expected) => {
     expect(spec(selector)).toEqual(expected);
   });

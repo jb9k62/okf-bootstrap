@@ -2,28 +2,21 @@
  * A Bloom filter: a bit array and k hash functions that answer "definitely not seen" or "maybe
  * seen", never "definitely seen". The bloom-filter widget draws this; bloom.test.ts pins it.
  *
- * Positions come from double hashing (h1 + i * h2 over two FNV-1a hashes), the standard way to
- * get k hashes from two without losing the false-positive rate.
+ * Positions come from double hashing (h1 + i * h2 over two seeded hashes from hash.ts), the
+ * standard way to get k hashes from two without losing the false-positive rate.
  */
+
+import { hash32 } from './hash.ts';
 
 export interface Bloom {
   bits: Uint8Array;
   k: number;
 }
 
-function fnv1a(text: string, seed: number): number {
-  let hash = (0x811c9dc5 ^ seed) >>> 0;
-  for (let i = 0; i < text.length; i++) {
-    hash ^= text.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return hash >>> 0;
-}
-
 /** The k bit positions `key` maps to in a filter of `m` bits (may repeat for small m). */
 export function positions(key: string, m: number, k: number): number[] {
-  const h1 = fnv1a(key, 0);
-  const h2 = fnv1a(key, 0x9e3779b9) | 1; // odd, so the stride visits every bit when m is a power of two
+  const h1 = hash32(key, 0);
+  const h2 = hash32(key, 0x9e3779b9) | 1; // odd, so the stride visits every bit when m is a power of two
   return Array.from({ length: k }, (_, i) => ((h1 + Math.imul(i, h2)) >>> 0) % m);
 }
 
@@ -62,7 +55,7 @@ export interface Measured {
   measuredRate: number;
 }
 
-/** Add `members` named `<prefix>0..`, then probe keys that were never added and count the "maybe"s. */
+/** Add `n` keys named `evt-0`, `evt-1`, ..., then probe keys that were never added and count the "maybe"s. */
 export function measure(m: number, k: number, n: number, probes = 2000): Measured {
   const filter = create(m, k);
   for (let i = 0; i < n; i++) add(filter, `evt-${i}`);

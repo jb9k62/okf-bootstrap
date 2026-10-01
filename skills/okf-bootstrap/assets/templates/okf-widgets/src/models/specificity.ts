@@ -144,6 +144,12 @@ export function parseSelector(selector: string): Parsed {
       push(gap.trim() === '' ? ' ' : gap.trim(), 'zero', ZERO);
       i += gap.length;
     } else if (ch === '|') {
+      // A namespace prefix (`svg|a`) is not a type selector of its own: it counts nothing.
+      const prefix = parts[parts.length - 1];
+      if (prefix?.kind === 'type' && i > 0 && !/\s/.test(text[i - 1]!)) {
+        prefix.kind = 'zero';
+        total = add(total, [0, 0, -1]);
+      }
       push('|', 'zero', ZERO);
       i++;
     } else {

@@ -30,7 +30,7 @@ const PRESETS: readonly WorldPreset<State>[] = [
     id: 'loop',
     label: 'A loop one key too big',
     state: { policy: 'lru', capacity: 3, trace: '1 2 3 4 1 2 3 4 1 2 3 4 1 2 3 4' },
-    note: 'Four keys cycle through room for three. By the time a key comes round again it is the one LRU just evicted, so it never hits. OPT keeps most of the loop. Raise the size to 4 and every request after the first lap hits.',
+    note: 'Four keys cycle through room for three. By the time a key comes round again it is the one LRU just evicted, so it never hits. OPT still hits half the time. Raise the size to 4 and every request after the first lap hits.',
   },
   {
     id: 'scan',

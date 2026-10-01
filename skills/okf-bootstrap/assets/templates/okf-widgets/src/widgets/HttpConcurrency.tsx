@@ -57,7 +57,7 @@ const PRESETS: readonly WorldPreset<State>[] = [
     id: 'multiplex',
     label: 'One connection, many streams (HTTP/2)',
     state: { limit: 16, setupMs: 40, shared: true },
-    note: 'One handshake, then every ready request goes at once. The floor is the same critical path, reached without opening a dozen connections.',
+    note: 'One handshake, then every ready request goes at once. The floor is the same critical path, reached on one connection instead of many.',
   },
 ];
 
@@ -70,6 +70,9 @@ export default function HttpConcurrency({ source }: { source: string }) {
     requests = parseRequests(dataLines(source.trim() === '' ? PAGE_LOAD : source));
   } catch (error) {
     return <SourceProblem error={error} />;
+  }
+  if (requests.length === 0) {
+    return <SourceProblem error='no requests: give one per line as "id ms [after=a,b]"' />;
   }
 
   const { limit, setupMs, shared } = world.state;

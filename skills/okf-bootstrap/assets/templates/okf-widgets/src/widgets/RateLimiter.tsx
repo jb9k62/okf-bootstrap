@@ -9,6 +9,10 @@ import { useState } from 'react';
 import { Choice, Facts, ModelNote, Note, Presets, Scrubber, Slider, useWorld, type WorldPreset } from '../kit.tsx';
 import { LIMITERS, parseTimes, run, type Limiter } from '../models/ratelimit.ts';
 
+const MAX_REQUESTS = 200;
+/** Past this many windows the boundary marks would be a grey smear (and a slow one): skip them. */
+const MAX_BOUNDARIES = 100;
+
 interface State {
   limiter: Limiter;
   limit: number;
@@ -36,7 +40,7 @@ const PRESETS: readonly WorldPreset<State>[] = [
     id: 'bucket',
     label: 'Token bucket: a burst, then a trickle',
     state: { limiter: 'bucket', limit: 5, windowMs: 1000, times: BURST },
-    note: 'The bucket starts full, so a burst of five goes through at once, then requests are allowed only as fast as tokens refill. It stores two numbers, and it is the one that allows a deliberate burst.',
+    note: 'The bucket starts full, so a burst of five goes through at once, then requests are allowed only as fast as tokens refill. It stores two numbers, and it is the one that allows a deliberate burst. Check the worst burst: a full bucket plus the tokens that refill within the same second lets seven through in one window.',
   },
 ];
 
@@ -44,11 +48,13 @@ export default function RateLimiter() {
   const world = useWorld(PRESETS);
   const [step, setStep] = useState(0);
   const { limiter, limit, windowMs, times: text } = world.state;
-  const times = parseTimes(text);
+  const given = parseTimes(text);
+  const times = given.slice(0, MAX_REQUESTS);
   const result = run(limiter, limit, windowMs, times);
   const at = Math.min(step, Math.max(0, result.decisions.length - 1));
   const current = result.decisions[at];
   const span = Math.max(1, ...times) * 1.02;
+  const boundaries = Math.floor(span / windowMs) + 1;
   const rule = LIMITERS.find((l) => l.id === limiter)!.rule;
   const unit = limiter === 'bucket' ? 'tokens left' : 'counted in the window';
 
@@ -80,12 +86,16 @@ export default function RateLimiter() {
             spellCheck={false}
             onChange={(event) => world.set({ times: event.target.value })}
           />
+          {given.length > MAX_REQUESTS && (
+            <p className="okfw-reason">Only the first {MAX_REQUESTS} requests are used.</p>
+          )}
         </section>
       </div>
 
       <div className="okfw-track okfw-timeline" role="img" aria-label={`${result.allowed} of ${times.length} requests allowed`}>
         {limiter === 'fixed' &&
-          Array.from({ length: Math.floor(span / windowMs) + 1 }, (_, i) => (
+          boundaries <= MAX_BOUNDARIES &&
+          Array.from({ length: boundaries }, (_, i) => (
             <span key={i} className="okfw-boundary" style={{ left: `${((i * windowMs) / span) * 100}%` }} />
           ))}
         {result.decisions.map((d, i) => (

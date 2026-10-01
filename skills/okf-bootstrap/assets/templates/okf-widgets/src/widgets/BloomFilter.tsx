@@ -9,8 +9,6 @@
 import { useState } from 'react';
 import { Facts, ModelNote, Note, Presets, Slider, useWorld, type WorldPreset } from '../kit.tsx';
 import {
-  add,
-  create,
   expectedFalsePositiveRate,
   filled,
   has,
@@ -30,7 +28,7 @@ const PRESETS: readonly WorldPreset<State>[] = [
     id: 'sized',
     label: 'Sized for the job',
     state: { m: 1024, n: 100, k: 7 },
-    note: 'About ten bits per key and seven hashes: roughly one "yes" in a hundred is wrong, and "no" is never wrong. Ask about evt-7 (added) and evt-999 (never added).',
+    note: 'About ten bits per key and seven hashes: roughly one key in a hundred that was never added still gets a "yes", and "no" is never wrong. Ask about evt-7 (added) and evt-999 (never added).',
   },
   {
     id: 'overfull',
@@ -60,9 +58,8 @@ export default function BloomFilter() {
   const [query, setQuery] = useState('evt-7');
   const { m, n, k } = world.state;
 
-  const filter = create(m, k);
-  for (let i = 0; i < n; i++) add(filter, `evt-${i}`);
   const measured = measure(m, k, n);
+  const filter = measured.filter;
   const expected = expectedFalsePositiveRate(m, k, n);
   const best = optimalK(m, n);
 
@@ -145,7 +142,7 @@ export default function BloomFilter() {
             </>,
           ],
           [
-            'Wrong "yes" answers',
+            'Strangers answered "yes"',
             `${percent(measured.measuredRate)} measured on ${measured.probes} strangers; ${percent(expected)} by formula`,
           ],
           ['Best hash count here', k === best ? `${best}, which is what you have` : `${best} (you have ${k})`],
@@ -153,7 +150,8 @@ export default function BloomFilter() {
       />
       {world.preset && <Note>{world.preset.note}</Note>}
       <ModelNote>
-        A model: <code>models/bloom.ts</code> (two FNV-1a hashes combined by double hashing). A
+        A model: <code>models/bloom.ts</code> (two seeded, mixed FNV-1a hashes from{' '}
+        <code>models/hash.ts</code>, combined by double hashing). A
         production filter differs in hash quality and in being sized once, up front, for the
         keys it will hold.
       </ModelNote>

@@ -25,6 +25,8 @@
  *                     pan/zoom controls. Exit 1 if a diagram fails, 2 if the
  *                     check could not run at all (no playwright, no Chromium,
  *                     CDN unreachable).
+ *     --fix         first rewrite the bundle's .md files so every ER diagram has its
+ *                   relationship key (what ||--o{ mean) inserted or refreshed
  *     --strict      exit 1 if any conformance issues are found
  *     --widgets <f> the built widget bundle to inline (default:
  *                   packages/okf-widgets/dist/okf-widgets.js next to scripts/)
@@ -78,6 +80,7 @@ interface Options {
   validateOnly: boolean;
   strict: boolean;
   checkRender: boolean;
+  fix: boolean;
   widgets: string | null;
 }
 
@@ -284,6 +287,7 @@ function walkBundle(
       issues.push({ file: rel, kind: 'read', message: errorMessage(e) });
       continue;
     }
+    issues.push(...erdLegendIssues(rel, text));
     if (RESERVED.has(rel)) {
       reserved.push(rel);
       // No `type` needed, but index.md is where most bundle links live, so its
@@ -394,6 +398,190 @@ function danglingLinkIssues(
     }
   }
   return out;
+}
+
+// --- ER diagram legends ----------------------------------------------------------
+// Mermaid's crow's-foot symbols (||--o{) are easy to forget, so every erDiagram is followed
+// by a small key, generated from the diagram itself. It sits in
+// the markdown (not the viewer), so GitHub and editors show it too. The validator flags a
+// missing or out-of-date key and --fix writes it, so no agent has to remember to.
+
+const ERD_LEGEND_OPEN = '<!-- okf:erd-legend -->';
+const ERD_LEGEND_CLOSE = '<!-- /okf:erd-legend -->';
+
+// Each cardinality, with the glyph as it is written on the left and on the right of a line.
+const ERD_CARDINALITIES = [
+  { left: '||', right: '||', means: 'exactly one' },
+  { left: '|o', right: 'o|', means: 'zero or one' },
+  { left: '}o', right: 'o{', means: 'zero or more' },
+  { left: '}|', right: '|{', means: 'one or more' },
+] as const;
+
+const ERD_RELATIONSHIP_RE = /(\|o|\|\||\}o|\}\|)(--|\.\.)(o\||\|\||o\{|\|\{)/g;
+const ERD_ENTITY = String.raw`("[^"]+"|[\w-]+)(?:\[[^\]]*\])?`;
+const ERD_LINE_RE = new RegExp(
+  String.raw`^\s*${ERD_ENTITY}\s+(\|o|\|\||\}o|\}\|)(--|\.\.)(o\||\|\||o\{|\|\{)\s+${ERD_ENTITY}`,
+);
+
+interface Fence {
+  info: string;
+  open: number; // 0-based index of the opening fence line
+  close: number | null; // index of the closing fence line; null when never closed
+}
+
+/**
+ * Every top-level code fence. A fence only closes on a matching run of its own character
+ * (CommonMark), so a ```mermaid example inside a ````markdown block is part of that block
+ * and is not returned, which matches what the viewer renders and what okf-mermaid checks.
+ */
+function scanFences(lines: string[]): Fence[] {
+  const fences: Fence[] = [];
+  let open: { info: string; index: number; char: string; len: number } | null = null;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i]!.match(/^(\s*)(`{3,}|~{3,})(.*)$/);
+    if (!m) continue;
+    if (!open) {
+      open = { info: m[3]!.trim().toLowerCase(), index: i, char: m[2]![0]!, len: m[2]!.length };
+    } else if (m[2]![0] === open.char && m[2]!.length >= open.len && m[3]!.trim() === '') {
+      fences.push({ info: open.info, open: open.index, close: i });
+      open = null;
+    }
+  }
+  if (open) fences.push({ info: open.info, open: open.index, close: null });
+  return fences;
+}
+
+const erdName = (raw: string): string => raw.replace(/^"|"$/g, '');
+
+/**
+ * The key for one erDiagram's source: the symbols and line styles it uses. A diagram with no
+ * relationship in symbol form (entities only, or written in words) gets the full reference.
+ */
+function erdLegend(source: string): string[] {
+  const used = new Set<string>();
+  let dashed = false;
+  let solid = false;
+  for (const m of source.matchAll(ERD_RELATIONSHIP_RE)) {
+    used.add(m[1]!).add(m[3]!);
+    if (m[2] === '..') dashed = true;
+    else solid = true;
+  }
+  const reference = used.size === 0;
+  if (reference) {
+    for (const c of ERD_CARDINALITIES) used.add(c.left).add(c.right);
+    solid = dashed = true;
+  }
+
+  const out = ['> [!note] Reading the diagram'];
+  for (const c of ERD_CARDINALITIES) {
+    if (used.has(c.left) || used.has(c.right)) {
+      const glyphs = c.left === c.right ? `\`${c.left}\`` : `\`${c.left}\` and \`${c.right}\``;
+      out.push(`> - ${glyphs}: ${c.means}`);
+    }
+  }
+  const lines: string[] = [];
+  if (solid) lines.push('`--` solid, identifying (the child cannot exist without its parent)');
+  if (dashed) lines.push('`..` dashed, non-identifying');
+  if (lines.length) out.push(`> - ${lines.join('; ')}`);
+  const keys = ['PK', 'FK', 'UK'].filter(
+    (k) => reference || new RegExp(String.raw`\b${k}\b`).test(source),
+  );
+  const names = { PK: 'primary key', FK: 'foreign key', UK: 'unique key' } as const;
+  if (keys.length) {
+    out.push(`> - Columns: ${keys.map((k) => `\`${k}\` ${names[k as keyof typeof names]}`).join(', ')}`);
+  }
+
+  // A worked example from the diagram itself: the marker next to an entity says how many of
+  // that entity each row on the other side is linked to.
+  for (const line of source.split(/\r?\n/)) {
+    const m = line.match(ERD_LINE_RE);
+    if (!m) continue;
+    const meaning = (glyph: string) =>
+      ERD_CARDINALITIES.find((c) => c.left === glyph || c.right === glyph)!.means;
+    const [left, right] = [erdName(m[1]!), erdName(m[5]!)];
+    out.push(
+      `> - Example: \`${left} ${m[2]}${m[3]}${m[4]} ${right}\` reads as: each ${left} is linked to ` +
+        `${meaning(m[4]!)} ${right}; each ${right} is linked to ${meaning(m[2]!)} ${left}.`,
+    );
+    break;
+  }
+  return [ERD_LEGEND_OPEN, ...out, ERD_LEGEND_CLOSE];
+}
+
+interface ErdLegendPlan {
+  line: number; // 1-based line of the ```mermaid fence
+  state: 'ok' | 'missing' | 'stale';
+  from: number; // where the existing key starts (or where a new one goes), as a line index
+  to: number; // one past the existing key's last line; equal to `from` when there is none
+  expected: string[];
+}
+
+/** One entry per erDiagram: whether its key is present and current. */
+function planErdLegends(text: string): ErdLegendPlan[] {
+  const lines = text.split(/\r?\n/);
+  const plans: ErdLegendPlan[] = [];
+  for (const fence of scanFences(lines)) {
+    if (fence.info !== 'mermaid' || fence.close === null) continue;
+    const source = lines.slice(fence.open + 1, fence.close).join('\n');
+    if (!/^\s*erDiagram\b/.test(source.replace(/^(\s*(%%.*)?\n)+/, ''))) continue;
+    const expected = erdLegend(source);
+    let at = fence.close + 1;
+    while (at < lines.length && lines[at]!.trim() === '') at++;
+    const after = lines.slice(at);
+    const end = lines[at]?.trim() === ERD_LEGEND_OPEN ? at + 1 + after.findIndex((l) => l.trim() === ERD_LEGEND_CLOSE) : -1;
+    if (end > at) {
+      const current = lines.slice(at, end).map((l) => l.trimEnd());
+      plans.push({
+        line: fence.open + 1,
+        state: current.join('\n') === expected.join('\n') ? 'ok' : 'stale',
+        from: at,
+        to: end,
+        expected,
+      });
+    } else {
+      plans.push({ line: fence.open + 1, state: 'missing', from: fence.close + 1, to: fence.close + 1, expected });
+    }
+  }
+  return plans;
+}
+
+/** The text with every erDiagram key inserted or refreshed. Unchanged when all are current. */
+function applyErdLegends(text: string): string {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const lines = text.split(/\r?\n/);
+  // Bottom to top, so an edit never moves the lines a pending one refers to.
+  for (const plan of planErdLegends(text).reverse()) {
+    if (plan.state === 'ok') continue;
+    if (plan.state === 'stale') lines.splice(plan.from, plan.to - plan.from, ...plan.expected);
+    else lines.splice(plan.from, 0, '', ...plan.expected, ...(lines[plan.from]?.trim() ? [''] : []));
+  }
+  return lines.join(eol);
+}
+
+function erdLegendIssues(file: string, text: string): Issue[] {
+  return planErdLegends(text)
+    .filter((plan) => plan.state !== 'ok')
+    .map((plan) => ({
+      file,
+      kind: 'erd-legend',
+      message:
+        `erDiagram at line ${plan.line} has ${plan.state === 'missing' ? 'no' : 'an out-of-date'} ` +
+        'relationship key below it (run okf-view with --fix to write it)',
+    }));
+}
+
+/** Rewrite every .md file in the bundle whose ER diagram keys are missing or stale. */
+function fixErdLegends(bundleRoot: string): string[] {
+  const changed: string[] = [];
+  for (const rel of listMarkdown(bundleRoot)) {
+    const full = path.join(bundleRoot, rel);
+    const before = fs.readFileSync(full, 'utf8');
+    const after = applyErdLegends(before);
+    if (after === before) continue;
+    fs.writeFileSync(full, after, 'utf8');
+    changed.push(rel);
+  }
+  return changed;
 }
 
 // --- graph construction ------------------------------------------------------
@@ -949,6 +1137,10 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
   text-transform: uppercase;
   color: var(--callout-accent, var(--text-muted));
 }
+.prose .erd-glyph { display: inline-block; vertical-align: middle; line-height: 0; color: var(--text); }
+.prose .erd-glyph svg { overflow: visible; }
+.prose .erd-glyph path { fill: none; stroke: currentColor; stroke-width: 1.4; }
+.prose .erd-glyph circle { fill: color-mix(in srgb, var(--callout-accent) 9%, var(--surface)); stroke: currentColor; stroke-width: 1.4; }
 .prose .callout-note { --callout-accent: #2563eb; }
 .prose .callout-tip { --callout-accent: #0d9488; }
 .prose .callout-important { --callout-accent: #7c3aed; }
@@ -1101,6 +1293,22 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
   background: var(--bg);
 }
 .prose .mermaid.expanded .mermaid-canvas { background: var(--surface); }
+/* The ER diagram key (see drawErdKeys) shows only over the expanded diagram, as a panel in its corner. */
+.prose .callout.erd-key { display: none; }
+.prose .mermaid.expanded + .callout.erd-key {
+  display: block;
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  z-index: 61;
+  max-width: min(440px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow: auto;
+  margin: 0;
+  font-size: 13px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.25);
+  background: var(--surface);
+}
 
 /* Backlinks */
 #detail-backlinks { margin-top: 48px; padding-top: 16px; border-top: 1px solid var(--border); font-size: 15px; }
@@ -1403,6 +1611,7 @@ const JS = `
     if (first && first.tagName === "H1") first.remove();
 
     renderCallouts(body);
+    drawErdKeys(body);
     renderQuizzes(body);
     renderWidgets(body);
     addHeadingIds(body);
@@ -1550,13 +1759,83 @@ const JS = `
     }
   }
 
+  // --- ER diagram keys --------------------------------------------------------
+  // The generated key under an erDiagram names Mermaid's symbols as text (||--o{). Here each
+  // one is drawn the way the diagram draws it, with the text kept beside it for authoring.
+  // Left-hand symbols are drawn with their entity on the left; right-hand ones are mirrored.
+  const ERD_LEFT = { "||": "one", "|o": "zeroOne", "}o": "zeroMany", "}|": "oneMany" };
+  const ERD_RIGHT = { "||": "one", "o|": "zeroOne", "o{": "zeroMany", "|{": "oneMany" };
+
+  function erdEnd(kind, width, mirrored) {
+    const foot = "M12 8L0.5 2M12 8H0.5M12 8L0.5 14";
+    const shapes = {
+      one: '<path d="M9 3V13M14 3V13"/>',
+      zeroOne: '<path d="M9 3V13"/><circle cx="18" cy="8" r="3.5"/>',
+      zeroMany: '<path d="' + foot + '"/><circle cx="18" cy="8" r="3.5"/>',
+      oneMany: '<path d="' + foot + 'M17 3V13"/>',
+    };
+    const place = mirrored ? ' transform="translate(' + width + ',0) scale(-1,1)"' : "";
+    return "<g" + place + ">" + shapes[kind] + "</g>";
+  }
+
+  // One svg: an optional end on each side of a solid or dashed line.
+  function erdSvg(left, right, dashed, width, label) {
+    const svg = document.createElement("span");
+    svg.className = "erd-glyph";
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", label);
+    svg.innerHTML =
+      '<svg width="' + width + '" height="16" viewBox="0 0 ' + width + ' 16" aria-hidden="true">' +
+      '<path d="M0 8H' + width + '"' + (dashed ? ' stroke-dasharray="4 3"' : "") + "/>" +
+      (left ? erdEnd(left, width, false) : "") +
+      (right ? erdEnd(right, width, true) : "") +
+      "</svg>";
+    return svg;
+  }
+
+  function drawErdKeys(root) {
+    for (const title of root.querySelectorAll(".callout .callout-title")) {
+      if (title.textContent.trim() !== "Reading the diagram") continue;
+      // The key belongs to the diagram right above it, and shows only while that diagram is
+      // expanded (see .erd-key in the styles). Without such a diagram it stays in the page.
+      const callout = title.closest(".callout");
+      const above = callout.previousElementSibling;
+      if (above && above.matches("pre") && above.querySelector("code.language-mermaid")) callout.classList.add("erd-key");
+      for (const code of [...title.parentElement.querySelectorAll("code")]) {
+        const text = code.textContent;
+        const parts = text.split(" ");
+        if (parts.length === 3 && parts[1].length === 6 && ERD_LEFT[parts[1].slice(0, 2)] && ERD_RIGHT[parts[1].slice(4)]) {
+          // A whole relationship: entity, line with both ends, entity.
+          const glyph = erdSvg(ERD_LEFT[parts[1].slice(0, 2)], ERD_RIGHT[parts[1].slice(4)], parts[1].slice(2, 4) === "..", 76, parts[1]);
+          const first = document.createElement("code");
+          first.textContent = parts[0];
+          const last = document.createElement("code");
+          last.textContent = parts[2];
+          code.replaceWith(first, " ", glyph, " ", last);
+        } else if (text === "--" || text === "..") {
+          code.before(erdSvg(null, null, text === "..", 36, text), " ");
+        } else if (ERD_LEFT[text] || ERD_RIGHT[text]) {
+          // Right-hand spellings are the mirror image of the left-hand ones.
+          const right = ERD_RIGHT[text] && text !== "||" && !ERD_LEFT[text];
+          code.before(erdSvg(right ? null : ERD_LEFT[text], right ? ERD_RIGHT[text] : null, false, 36, text), " ");
+        }
+      }
+    }
+  }
+
   // --- Widgets --------------------------------------------------------------
   // A widget fenced block holds the name of one React widget from
-  // packages/okf-widgets. The block becomes a mount point; a missing bundle or
-  // an unknown name is shown, never hidden.
+  // packages/okf-widgets on its first line, and optionally data for it below. The
+  // block becomes a mount point; a missing bundle or an unknown name is shown,
+  // never hidden.
   function renderWidgets(root) {
     for (const block of [...root.querySelectorAll("pre > code.language-widget")]) {
-      const name = block.textContent.trim();
+      // The first line is the widget's name; anything after it is data for that widget (the SQL
+      // of a sql-erd, say).
+      const text = block.textContent;
+      const newline = text.indexOf("\\n");
+      const name = (newline < 0 ? text : text.slice(0, newline)).trim();
+      const source = newline < 0 ? "" : text.slice(newline + 1).trim();
       const mountPoint = document.createElement("div");
       mountPoint.className = "widget-mount";
       mountPoint.dataset.widget = name;
@@ -1565,7 +1844,7 @@ const JS = `
       let problem = null;
       if (!api) {
         problem = "The interactive widget " + name + " is not built. Run npm run okf:view, which builds the widgets first (npm run okf:widgets:build).";
-      } else if (!api.mount(mountPoint, name)) {
+      } else if (!api.mount(mountPoint, name, source)) {
         problem = "Unknown widget " + name + ". Known widgets: " + api.names.join(", ") + ".";
       }
       mountPoint.dataset.state = problem ? "error" : "mounted";
@@ -2420,6 +2699,7 @@ function parseArgs(argv: string[]): Options {
     validateOnly: false,
     strict: false,
     checkRender: false,
+    fix: false,
     widgets: null,
   };
   const positional: string[] = [];
@@ -2431,6 +2711,8 @@ function parseArgs(argv: string[]): Options {
       opts.validateOnly = true;
     } else if (a === '--check-render') {
       opts.checkRender = true;
+    } else if (a === '--fix') {
+      opts.fix = true;
     } else if (a === '--strict') {
       opts.strict = true;
     } else if (a === '--widgets') {
@@ -2893,6 +3175,14 @@ async function main() {
   if (!fs.existsSync(bundleRoot) || !fs.statSync(bundleRoot).isDirectory()) {
     console.error(`Bundle directory not found: ${bundleRoot}`);
     process.exit(2);
+  }
+  if (opts.fix) {
+    const changed = fixErdLegends(bundleRoot);
+    console.log(
+      changed.length
+        ? `Wrote ER diagram keys in ${changed.length} file(s): ${changed.join(', ')}`
+        : 'ER diagram keys: nothing to fix',
+    );
   }
   const { concepts, issues, reserved } = walkBundle(bundleRoot, new Date());
   const graph = buildGraph(concepts);

@@ -51,7 +51,7 @@ This creates:
 - `scripts/okf-view.mts` (the validator + viewer) and `scripts/okf-mermaid.mts` (the Mermaid parse checker)
 - `okf-concept-template.md` and `okf-explainer-template.md` (authoring aids, kept *outside* the bundle so they are not scanned)
 - with `--widgets`: `packages/okf-widgets/`, added to the npm `workspaces`
-- adds `okf:validate`, `okf:view`, `okf:mermaid`, `okf:mermaid:render` (and with widgets,
+- adds `okf:validate`, `okf:fix`, `okf:view`, `okf:mermaid`, `okf:mermaid:render` (and with widgets,
   `okf:widgets:build`, `okf:widgets:test`, `okf:widgets:typecheck`) to `package.json`, plus
   `yaml` as a devDependency
 
@@ -88,6 +88,7 @@ tooling into a project whose bundle is already written.
    the tools are `.mts`):
    ```jsonc
    "okf:validate":       "node scripts/okf-view.mts okf --validate",
+   "okf:fix":            "node scripts/okf-view.mts okf --validate --fix",
    "okf:view":           "node scripts/okf-view.mts okf",
    "okf:mermaid":        "node scripts/okf-mermaid.mts okf",
    "okf:mermaid:render": "node scripts/okf-view.mts okf --check-render"
@@ -236,6 +237,15 @@ loads from a CDN). Set `fill`, `stroke`, and `color` on every `classDef`, and ke
 `%%{init:…}%%` directive on a single line: a directive that spills onto following lines
 parses as a bad directive.
 
+**ER diagrams get a key.** Mermaid's crow's-foot symbols (`||--o{`) are hard to remember, so
+every `erDiagram` is followed by a small generated key: the symbols
+that diagram uses and what they mean, the line style, `PK`/`FK`, and one relationship read out
+in words. It is markdown (between `<!-- okf:erd-legend -->` markers), so GitHub and editors show
+it too. Do not write it by hand: `okf:validate` reports a missing or out-of-date key as an
+`erd-legend` issue, and `npm run okf:fix` writes or refreshes every one. A complicated schema
+(more than a handful of tables), or a reader who asks, also gets the `sql-erd` widget: see
+[EXPLAINERS.md](EXPLAINERS.md#sql-schemas-the-sql-erd-widget).
+
 Two gates, each catching what the other cannot:
 
 Both gates share one exit-code contract, so a green run always means the same thing:
@@ -350,7 +360,7 @@ version adds:
 - **callouts**: a blockquote starting `[!note]`, `[!tip]`, `[!important]`, `[!warning]`,
   `[!caution]`, `[!definition]`, `[!example]` or `[!edge-case]` becomes a styled box
 - **quizzes**: a ` ```quiz ` block becomes click-to-check questions with feedback and a score
-- **widgets**: a ` ```widget ` block mounts a React component from the project's
+- **widgets**: a ` ```widget ` block (name on the first line, optional data below it) mounts a React component from the project's
   `packages/okf-widgets` bundle, inlined into `viz.html` (so the page stays one file); a
   missing bundle or an unknown name shows a visible error, never a blank
 - heading ids, so `[text](#section)` links scroll within a concept
@@ -360,6 +370,7 @@ version adds:
 ```bash
 node scripts/okf-view.mts okf                # validate + write okf/viz.html
 node scripts/okf-view.mts okf --validate     # validate only
+node scripts/okf-view.mts okf --fix         # first write the key under every ER diagram (see above)
 node scripts/okf-view.mts okf --strict       # exit 1 on any issue
 node scripts/okf-view.mts okf --out PATH     # custom output path
 node scripts/okf-view.mts okf --check-render # + headless-browser audit: diagrams, quizzes, widgets
@@ -368,7 +379,7 @@ node scripts/okf-view.mts okf --widgets PATH # inline this widget bundle (defaul
 
 Validation report prints: bundle path, okf_version, valid concept count, graph edge count,
 reserved-file count, issue count (missing/unparseable `type`, unreadable file, dangling
-link, timestamp without an offset), trust-tier breakdown, and status breakdown. On success it writes `viz.html` and
+link, timestamp without an offset, ER diagram without its current key), trust-tier breakdown, and status breakdown. On success it writes `viz.html` and
 prints its size.
 
 `viz.html` renders bundle markdown as HTML, inline HTML included, and does not sanitise

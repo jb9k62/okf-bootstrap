@@ -306,6 +306,21 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.click('#view-switch [data-view=graph]');
   });
 
+  view('the ER diagram key shows only while its diagram is expanded', async () => {
+    await page.evaluate(() => window.__OKF_VIEW__.show('parcel-tracker/data-model'));
+    await page.waitForSelector('.mermaid[data-state=rendered]', { timeout: 30_000 });
+    const key = page.locator('#detail-body .callout.erd-key');
+    assert.equal(await key.count(), 1, 'the key is tied to the diagram above it');
+    assert.equal(await key.isVisible(), false, 'hidden in the reading pane');
+    assert.ok(await key.locator('.erd-glyph').count() > 0, 'its symbols are drawn');
+    await page.click('.mermaid-tools button[data-act=expand]');
+    assert.equal(await key.isVisible(), true, 'shown over the expanded diagram');
+    const box = (await key.boundingBox())!;
+    assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= 1400 && box.y + box.height <= 800, 'inside the window');
+    await page.keyboard.press('Escape');
+    assert.equal(await key.isVisible(), false, 'hidden again once collapsed');
+  });
+
   view('reading view hides the list or graph, shows the concept, and restores each view', async () => {
     const ids: string[] = await page.evaluate('window.__OKF_VIEW__.ids');
     await page.evaluate((id) => window.__OKF_VIEW__.show(id), ids[0]!);

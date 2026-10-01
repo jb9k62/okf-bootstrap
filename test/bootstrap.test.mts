@@ -53,6 +53,7 @@ describe('bootstrap', () => {
     assert.ok(!fs.existsSync(path.join(dir, 'packages')), 'no widgets without --widgets');
     const pkg = pkgOf(dir);
     assert.equal(pkg.scripts['okf:view'], 'node scripts/okf-view.mts okf');
+    assert.equal(pkg.scripts['okf:fix'], 'node scripts/okf-view.mts okf --validate --fix');
     assert.equal(pkg.scripts['okf:widgets:build'], undefined);
     assert.ok(pkg.devDependencies.yaml);
     assert.equal(pkg.type, undefined, 'the tools are .mts; package.json "type" stays alone');
@@ -154,6 +155,96 @@ describe('okf-view validation', () => {
     const r = run(VIEW, [dir, '--validate']);
     assert.equal(r.code, 0, r.out);
     assert.match(r.out, /okf_version\s+: 0\.3\s+\(this tool implements 0\.2/);
+  });
+});
+
+describe('okf-view ER diagram keys', () => {
+  const VIEW = path.join(SKILL, 'assets', 'okf-view.mts');
+  const ERD = [
+    '```mermaid',
+    'erDiagram',
+    '    TEAM ||--o{ PLAYER : fields',
+    '    PLAYER }o..o| COACH : "trained by"',
+    '    PLAYER {',
+    '        int id PK',
+    '        int team_id FK',
+    '    }',
+    '```',
+  ].join('\n');
+
+  function bundle(name: string, body: string): { dir: string; file: string } {
+    const dir = path.join(scratch, name);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, 'index.md'), '---\nokf_version: "0.2"\n---\n\n# T\n');
+    const file = path.join(dir, 'model.md');
+    fs.writeFileSync(file, `---\ntype: Data Model\n---\n\n# Model\n\n${body}\n\nAfter.\n`);
+    return { dir, file };
+  }
+
+  it('flags an ER diagram with no key, and --fix writes one that then validates', () => {
+    const { dir, file } = bundle('erd-missing', ERD);
+    const before = run(VIEW, [dir, '--validate', '--strict']);
+    assert.equal(before.code, 1, before.out);
+    assert.match(before.out, /model\.md\s+\[erd-legend\] erDiagram at line 7 has no relationship key/);
+
+    const fixed = run(VIEW, [dir, '--validate', '--strict', '--fix']);
+    assert.equal(fixed.code, 0, fixed.out);
+    const text = read(file);
+    // Only the symbols this diagram uses, each cardinality once, plus a worked example.
+    assert.match(text, /- `\|\|`: exactly one/);
+    assert.match(text, /- `\}o` and `o\{`: zero or more/);
+    assert.match(text, /- `\|o` and `o\|`: zero or one/);
+    assert.doesNotMatch(text, /one or more/);
+    assert.match(text, /solid, identifying[\s\S]*dashed, non-identifying/);
+    assert.match(text, /`PK` primary key, `FK` foreign key/);
+    assert.match(text, /Example: `TEAM \|\|--o\{ PLAYER` reads as: each TEAM is linked to zero or more PLAYER; each PLAYER is linked to exactly one TEAM/);
+    assert.match(text, /<!-- \/okf:erd-legend -->\n\nAfter\./, 'text after the key stays separated');
+
+    const again = run(VIEW, [dir, '--validate', '--strict', '--fix']);
+    assert.match(again.out, /nothing to fix/);
+    assert.equal(read(file), text, 'a second --fix changes nothing');
+  });
+
+  it('flags a key that no longer matches the diagram, and refreshes it in place', () => {
+    const { dir, file } = bundle('erd-stale', ERD);
+    run(VIEW, [dir, '--validate', '--fix']);
+    fs.writeFileSync(file, read(file).replace('PLAYER }o..o| COACH', 'PLAYER }|--|{ COACH'));
+    const stale = run(VIEW, [dir, '--validate', '--strict']);
+    assert.equal(stale.code, 1, stale.out);
+    assert.match(stale.out, /out-of-date relationship key/);
+    run(VIEW, [dir, '--validate', '--fix']);
+    const text = read(file);
+    assert.match(text, /one or more/);
+    assert.doesNotMatch(text, /zero or one/);
+    assert.equal(text.match(/okf:erd-legend -->/g)?.length, 2, 'one key, replaced rather than repeated');
+  });
+
+  it('leaves other diagrams, and ER examples inside an outer fence, alone', () => {
+    const body = [
+      '```mermaid',
+      'graph TD',
+      '  A --> B',
+      '```',
+      '',
+      '````markdown',
+      ERD,
+      '````',
+    ].join('\n');
+    const { dir, file } = bundle('erd-other', body);
+    const before = read(file);
+    const r = run(VIEW, [dir, '--validate', '--strict', '--fix']);
+    assert.equal(r.code, 0, r.out);
+    assert.equal(read(file), before);
+  });
+
+  it('gives an entity-only diagram the full reference key', () => {
+    const { dir, file } = bundle('erd-lonely', '```mermaid\nerDiagram\n    TEAM {\n        int id PK\n    }\n```');
+    assert.equal(run(VIEW, [dir, '--validate', '--strict']).code, 1);
+    assert.equal(run(VIEW, [dir, '--validate', '--strict', '--fix']).code, 0);
+    const text = read(file);
+    for (const meaning of ['exactly one', 'zero or one', 'zero or more', 'one or more']) assert.match(text, new RegExp(meaning));
+    assert.match(text, /`PK` primary key, `FK` foreign key, `UK` unique key/);
+    assert.doesNotMatch(text, /Example:/);
   });
 });
 

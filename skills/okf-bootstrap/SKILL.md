@@ -80,7 +80,8 @@ refreshed, and older `.mjs` copies are removed.
    - **Check every claim against the code before it goes in** (the playbook's checklist).
 4. **Verify.** All must pass before committing:
    ```bash
-   npm run okf:validate          # frontmatter, links, timestamps: expect 0 issues
+   npm run okf:fix               # writes the relationship key under every ER diagram
+   npm run okf:validate          # frontmatter, links, timestamps, ER keys: expect 0 issues
    npm run okf:view              # (builds widgets,) validates, writes okf/viz.html
    npm run okf:mermaid           # every mermaid block parses in mmdc
    npm run okf:mermaid:render    # headless Chromium: diagrams, quizzes, widgets all work
@@ -102,6 +103,10 @@ refreshed, and older `.mjs` copies are removed.
 - Short concepts, plain words, link instead of repeating. Bundle-root links
   (`[text](/path/concept.md)`) or relative ones; a link to a missing file is an issue.
 - Mermaid: `fill`, `stroke` and `color` on every `classDef`; any `%%{init}%%` on one line.
+- Every `erDiagram` is followed by the generated key that explains `||--o{`
+  and friends. Never write it by hand: run `npm run okf:fix`; `okf:validate` fails without it.
+  For a complicated schema, or when asked, add a ` ```widget ` with `sql-erd` and the schema's
+  SQL (scenarios, design review, join paths, delete impact): see EXPLAINERS.md.
 - Callouts `> [!definition] Term`; quizzes in a ` ```quiz ` block (exactly one `- [x]` per
   question); widgets in a ` ```widget ` block naming a registered widget.
 
@@ -109,8 +114,8 @@ refreshed, and older `.mjs` copies are removed.
 
 `packages/okf-widgets` is copied into the project and **becomes the project's code**. It ships
 a registry (`src/index.tsx`), a small kit (`Presets`, `Facts`, `Note`, `ModelNote`), styles
-built on the viewer's theme variables, and two worked examples (`utc-week`, `retry-backoff`)
-with models and tests. Keep the examples as references or delete them; write the project's
+built on the viewer's theme variables, and three worked examples (`utc-week`, `retry-backoff`,
+and `sql-erd`, which takes a schema's SQL from the block) with models and tests. Keep the examples as references or delete them; write the project's
 own widgets next to them, importing the project's real pure code through the `@app` alias
 where possible. Its `README.md` has the step-by-step.
 

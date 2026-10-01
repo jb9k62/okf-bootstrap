@@ -234,6 +234,7 @@ if (opts.scripts) {
       pkg.scripts = pkg.scripts || {};
       const build = hasWidgets ? 'npm run okf:widgets:build && ' : '';
       pkg.scripts['okf:validate'] = 'node scripts/okf-view.mts okf --validate';
+      pkg.scripts['okf:fix'] = 'node scripts/okf-view.mts okf --validate --fix';
       pkg.scripts['okf:view'] = build + 'node scripts/okf-view.mts okf';
       pkg.scripts['okf:mermaid'] = 'node scripts/okf-mermaid.mts okf';
       pkg.scripts['okf:mermaid:render'] = build + 'node scripts/okf-view.mts okf --check-render';
@@ -300,6 +301,7 @@ console.log('  npm install');
 console.log('  npm i -D @mermaid-js/mermaid-cli@11 playwright && npx playwright install chromium');
 console.log('\nChecks (expect all to pass before you commit):');
 console.log('  npm run okf:validate        # frontmatter + link conformance');
+console.log('  npm run okf:fix             # write the relationship key under every ER diagram');
 console.log('  npm run okf:view            # validate + write okf/viz.html');
 console.log('  npm run okf:mermaid         # every mermaid block parses (needs mmdc)');
 console.log('  npm run okf:mermaid:render  # every diagram, quiz and widget works in the viewer');

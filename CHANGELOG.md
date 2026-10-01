@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Better on phones**: the viewer's top bar is now a search box and one swipeable row of
+  controls (it used to fill half the screen), the graph is shorter and its colour key is a single
+  line. Widgets get touch-sized controls, full-width sliders and two-column short lists on narrow
+  screens, and native controls follow the accent colour.
 - **Seven computer-science widgets**, with tours in the demo: `rate-limiter` (fixed window,
   sliding window and token bucket, stepped through), `binary-search` (and what an unsorted list
   does to it), `consistent-hash` (a ring against `hash % servers`, with virtual nodes),

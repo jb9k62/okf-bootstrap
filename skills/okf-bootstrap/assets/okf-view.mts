@@ -733,6 +733,7 @@ ${CSS}
   </div>
   <div class="controls">
     <input id="search" type="search" placeholder="Filter by title, path or tag" aria-label="Filter the graph">
+    <div class="chips">
     <select id="filter-type" aria-label="Filter by type"><option value="">All types</option></select>
     <div id="view-switch" class="segmented" role="group" aria-label="View">
       <button type="button" data-view="graph" aria-pressed="true">Graph</button>
@@ -755,6 +756,7 @@ ${CSS}
     <button id="reset" type="button">Reset</button>
     <button id="reading-toggle" type="button" aria-pressed="false">Reading view</button>
     <button id="theme-toggle" type="button">Dark theme</button>
+    </div>
   </div>
 </header>
 
@@ -904,6 +906,7 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .brand span { font-size: 12px; color: var(--text-muted); }
 .controls { display: flex; flex-wrap: wrap; gap: 8px; }
 .controls input { width: 210px; }
+.chips { display: contents; }
 
 /* Layout: graph on the left, reading pane on the right */
 main { flex: 1; min-height: 0; display: flex; }
@@ -1371,7 +1374,20 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
   #graph-pane { flex: 0 0 40vh; border-right: 0; border-bottom: 1px solid var(--border); }
   body[data-view="table"]:not(.reading) #graph-pane { flex: 1; }
   #detail-content, #detail-empty { padding: 24px 18px 56px; }
+  /* A compact bar: the search box on its own line, every other control in one swipeable row */
+  .topbar { padding: 8px 12px; gap: 4px 12px; }
+  .controls { flex: 1 1 100%; flex-direction: column; gap: 6px; min-width: 0; max-width: 100%; }
+  .topbar { overflow: hidden; }
   .controls input { width: 100%; }
+  .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 12px 4px; }
+  .chips::-webkit-scrollbar { display: none; }
+  .chips > * { flex: 0 0 auto; }
+  .controls input, .controls select, .controls button { min-height: 36px; font-size: 14px; }
+  #graph-pane { flex-basis: 30vh; overflow: hidden; }
+  /* The colour key becomes one swipeable line so it does not cover the graph */
+  #legend { left: 8px; right: 8px; bottom: 8px; display: flex; gap: 14px; overflow-x: auto; white-space: nowrap; padding: 5px 10px; scrollbar-width: none; }
+  #legend::-webkit-scrollbar { display: none; }
+  #legend li { flex: 0 0 auto; }
   #statusbar { padding: 6px 12px; gap: 8px; }
 }
 `;

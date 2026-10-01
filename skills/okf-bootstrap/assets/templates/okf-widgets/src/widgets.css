@@ -772,3 +772,59 @@
   flex: 1 1 0;
   border-radius: 2px 2px 0 0;
 }
+
+/* Refinements shared by every widget: native controls take the accent, and plain lists and
+   inline controls sit tighter than the reading column's prose rhythm. */
+.okfw input[type='range'],
+.okfw input[type='checkbox'],
+.okfw input[type='radio'] {
+  accent-color: var(--accent, #2563eb);
+}
+.okfw .okfw-plain > li {
+  margin: 0;
+  line-height: 1.5;
+}
+.okfw-presets button {
+  line-height: 1.3;
+}
+
+/* Narrow screens: comfortable touch targets, less padding, and sliders that fill the width. */
+@media (max-width: 600px) {
+  .okfw {
+    padding: 12px 12px 10px;
+    font-size: 14px;
+  }
+  .okfw button,
+  .okfw select,
+  .okfw input[type='number'] {
+    min-height: 36px;
+    font-size: 14px;
+  }
+  .okfw input[type='checkbox'],
+  .okfw input[type='radio'] {
+    width: 18px;
+    height: 18px;
+    vertical-align: -3px;
+    margin-right: 4px;
+  }
+  .okfw input[type='range'] {
+    width: 100%;
+    max-width: 100%;
+    margin: 4px 0;
+  }
+  .okfw-row,
+  .okfw-toggle {
+    margin: 12px 0;
+  }
+  .okfw-columns {
+    gap: 12px;
+  }
+  .okfw-big {
+    font-size: 24px;
+  }
+  /* Short numbered lists (delays, steps) flow into columns instead of one tall stack. */
+  .okfw .okfw-plain {
+    columns: 2;
+    column-gap: 16px;
+  }
+}

@@ -387,4 +387,32 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.click('#theme-toggle');
     await page.click('[data-view=graph]');
   });
+
+  view('on a phone the top bar stays compact and the page does not scroll sideways', async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      const m = await page.evaluate(() => {
+        const box = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+        const chips = document.querySelector('.chips') as HTMLElement;
+        return {
+          scrollWidth: document.documentElement.scrollWidth,
+          topbar: box('.topbar').height,
+          searchWidth: box('#search').width,
+          searchAboveChips: box('#search').bottom <= box('.chips').top,
+          chipsScroll: chips.scrollWidth > chips.clientWidth,
+          legendInPane: box('#legend').right <= box('#graph-pane').right,
+          detail: box('#detail').height,
+        };
+      });
+      assert.equal(m.scrollWidth, 390, 'page width equals the viewport');
+      assert.ok(m.topbar < 844 * 0.25, `top bar is ${m.topbar}px tall`);
+      assert.ok(m.searchWidth > 390 - 40, 'search fills the row');
+      assert.equal(m.searchAboveChips, true);
+      assert.equal(m.chipsScroll, true, 'the controls row scrolls instead of wrapping');
+      assert.equal(m.legendInPane, true);
+      assert.ok(m.detail > 844 * 0.4, `reading pane is ${m.detail}px tall`);
+    } finally {
+      await page.setViewportSize({ width: 1400, height: 800 });
+    }
+  });
 });

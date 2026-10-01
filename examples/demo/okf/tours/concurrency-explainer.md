@@ -7,7 +7,7 @@ generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
 ---
 
 This tour is for anyone choosing how many requests a client sends in parallel. Suppose a poll
-cycle in Parcel tracker first fetches a token, then reads twelve carrier feeds, and one feed
+cycle in Parcel tracker first fetches a token, then reads eleven carrier feeds, and one feed
 (the one for each carrier's depot list) has to be read before the events that refer to it.
 How many of those should run at once? There is a widget in the middle and a [quiz](#quiz) at
 the end. The widget's numbers are made up for the example; they are not measurements of any
@@ -92,7 +92,7 @@ events 240 after=depots
 Three questions on the ideas above.
 
 ```quiz
-Nothing is queueing at a limit of 12, and the batch takes 540 ms. You raise the limit to 24. What happens to the total?
+Nothing is queueing at a limit of 12, and the batch takes 580 ms. You raise the limit to 24. What happens to the total?
 - [ ] It halves, because twice as many requests can run
 ~ Only requests that are waiting for a connection benefit, and none are.
 - [x] It does not improve, and it may get worse if the extra connections pay handshakes
@@ -112,7 +112,7 @@ Why does one HTTP/2 connection often beat six HTTP/1.1 connections for the same 
 - [ ] It makes each request faster on the wire
 ~ The requests take the same time; what changes is the overhead around them.
 - [x] It pays one handshake and still lets many requests be in flight as streams
-~ In the widget the six-connection run pays six handshakes before its requests get going.
+~ In the widget the six-connection run opens six connections and pays a handshake on each; the shared connection pays one and reaches the same floor.
 - [ ] It removes the dependency between requests
 ~ A request that needs another's answer still has to wait.
 ```

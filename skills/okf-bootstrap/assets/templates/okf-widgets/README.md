@@ -13,7 +13,7 @@ retry-backoff
 A widget that takes data (`sql-erd` reads a schema's SQL, `http-concurrency` its requests,
 `css-specificity` its rules) gets the text below the name as its `source` prop, and the viewer
 passes it through `mount(element, name, source)`. Data-driven widgets share one line convention
-(`models/source.ts`): one record per line, `--` starts a comment.
+(`models/source.ts`): one record per line, and a line starting with `--` is a comment.
 
 `npm run okf:view` builds this package to one IIFE file (`dist/okf-widgets.js`) and inlines it
 into `okf/viz.html`, so the viewer stays a single self-contained page. The package is
@@ -35,8 +35,8 @@ came with are worked examples, each about one idea:
 | `binary-search` | Halving beats scanning, but only on a sorted list | `search.ts` |
 | `consistent-hash` | A ring moves a fraction of keys when a server joins; `hash % n` moves most | `ring.ts` |
 
- Keep them as references,
-delete them, or replace them with widgets about this project's own ideas.
+Keep them as references, delete them, or replace them with widgets about this project's own
+ideas.
 
 ## Layout
 
@@ -45,7 +45,7 @@ delete them, or replace them with widgets about this project's own ideas.
 | `src/index.tsx` | The registry (`WIDGETS`) and the `mount` / `unmountAll` / `names` API the viewer calls |
 | `src/kit.tsx` | Shared pieces: `useWorld` (state plus presets), `Presets`, `Choice`, `Slider`, `Toggle`, `BarChart`, `Scrubber`, `Facts`, `Note`, `ModelNote`, `SourceProblem` |
 | `src/widgets/*.tsx` | One component per widget, plus `widgets.test.tsx` |
-| `src/models/*.ts` | Pure logic a widget draws, each with a `*.test.ts`. `ddl.ts`, `schema.ts` and `layout.ts` serve `sql-erd`: they read SQL, review the design and place the tables, and work for any schema. `source.ts` reads the block's data lines |
+| `src/models/*.ts` | Pure logic a widget draws, each with a `*.test.ts`. `ddl.ts`, `schema.ts` and `layout.ts` serve `sql-erd`: they read SQL, review the design and place the tables, and work for any schema. `source.ts` reads the block's data lines; `hash.ts` is the string hash `bloom.ts` and `ring.ts` share |
 | `src/widgets.css` | Styles, built on the viewer's CSS variables so both themes work |
 
 ## Add a widget
@@ -58,8 +58,8 @@ delete them, or replace them with widgets about this project's own ideas.
    (SQL, a server, another language), write a TypeScript model and pin it with a test that
    uses the **same cases as the real code's tests**.
 3. **Write the component** in `src/widgets/`: `useWorld` with presets for the edge cases (each
-   carrying its state and note), direct controls for free play, a result derived from the model on every render, and a `ModelNote` that says
-   what is real code and what is a model.
+   carrying its state and note), direct controls for free play, a result derived from the
+   model on every render, and a `ModelNote` that says what is real code and what is a model.
 4. **Mark one control `data-probe`** (the `probe` prop of `Presets` does it). The viewer's
    render gate (`npm run okf:mermaid:render`) clicks it and fails if the widget's text does
    not change.

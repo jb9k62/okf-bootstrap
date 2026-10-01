@@ -47,8 +47,9 @@ binary-search
 
 > [!tip] What to notice
 > Binary search found 90 in 5 looks where linear search needed 46. On the unsorted list it
-> reports a value that is plainly there as missing, and nothing in the output says it is
-> wrong.
+> reports a value that is plainly there as missing, and nothing in binary search's own answer
+> says it is wrong: the widget warns only because it also checks the order and runs a linear
+> search.
 
 ## Details
 

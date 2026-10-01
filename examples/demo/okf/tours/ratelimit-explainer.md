@@ -69,8 +69,10 @@ rate-limiter
 
 > [!edge-case] A deliberate burst
 > A token bucket allows a burst of up to its size after a quiet period. That is a feature when
-> callers are bursty (a page load) and a hazard when the server cannot take the burst. Size the
-> bucket for the burst you can accept.
+> callers are bursty (a page load) and a hazard when the server cannot take the burst. Within
+> one window it can also hand out the tokens that refill during it, so the worst burst is up to
+> about twice its size: seven in a second on the widget's token-bucket preset, against a limit
+> of five. Size the bucket for the burst you can accept.
 
 ## Quiz
 

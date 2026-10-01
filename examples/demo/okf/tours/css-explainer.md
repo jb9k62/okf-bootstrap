@@ -47,8 +47,8 @@ flowchart TD
     class W,F good
 ```
 
-Try it. The widget starts with the badge's situation: a `.late` rule against the
-`#status` rule that styled it green. Click **Ten classes against one id**, then **!important
+Try it. The widget starts with the badge's situation: a `.badge.late` rule against the
+`#parcel .status` rule that styled it green. Click **Ten classes against one id**, then **!important
 beats an id**, and edit a selector to see its score change.
 
 ```widget

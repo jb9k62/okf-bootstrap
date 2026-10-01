@@ -79,7 +79,7 @@ cache-policy
 Three questions on the ideas above.
 
 ```quiz
-You double a FIFO cache's size and its hit rate falls on the same requests. Is that a bug?
+You give a FIFO cache room for one more entry and its hit rate falls on the same requests. Is that a bug?
 - [ ] Yes, a bigger cache can never miss more
 ~ That holds for LRU and OPT, which keep a superset of the smaller cache's entries. FIFO has no such guarantee.
 - [x] No, it is Belady's anomaly: FIFO evicts by age, so extra room can change which entries are oldest at the wrong moment

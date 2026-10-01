@@ -53,7 +53,7 @@ bloom-filter
 ```
 
 > [!tip] What to notice
-> The wrong "yes" answers go up as the bits fill. Hash functions help until each key lights
+> The share of never-added keys that get a "yes" goes up as the bits fill. Hash functions help until each key lights
 > so many bits that the array fills; there is a best number, about 0.69 times the bits per key.
 
 ## Details
@@ -93,7 +93,7 @@ The poller skips any event the filter says it has seen, and never checks the dat
 - [ ] Nothing, a Bloom filter never lies
 ~ It never lies with a "no". A "yes" can be wrong.
 ---
-You keep adding keys to a fixed-size Bloom filter. What happens to the share of wrong "yes" answers?
+You keep adding keys to a fixed-size Bloom filter. What happens to the share of never-added keys that get a "yes"?
 - [ ] It stays the same, because the hash functions do not change
 ~ The hashes stay the same, but there are fewer dark bits for a stranger to hit.
 - [x] It climbs towards every question being answered "yes"

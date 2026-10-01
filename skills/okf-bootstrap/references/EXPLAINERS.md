@@ -135,7 +135,7 @@ package belongs to the project once scaffolded, and its widgets should be about 
   a state the reader has left.
 - **Take data from the block when the idea is general.** A widget about requests, rules or
   keys reads them from the lines under its name (`dataLines` and `cells` in `models/source.ts`:
-  one record per line, `--` comments), so one widget serves many concepts. Say which line and
+  one record per line, `--` comment lines), so one widget serves many concepts. Say which line and
   what was expected when a line is wrong (`SourceProblem`), and keep a built-in default.
 - **One `data-probe` control** (the `probe` prop of `Presets`). The render gate clicks it and
   fails the build if the widget's text does not change, which catches a widget that mounts but

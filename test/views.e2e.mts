@@ -306,19 +306,41 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.click('#view-switch [data-view=graph]');
   });
 
-  view('the ER diagram key shows only while its diagram is expanded', async () => {
+  view('the ER diagram key sits under its diagram, and moves to a corner panel when it is expanded', async () => {
     await page.evaluate(() => window.__OKF_VIEW__.show('parcel-tracker/data-model'));
     await page.waitForSelector('.mermaid[data-state=rendered]', { timeout: 30_000 });
     const key = page.locator('#detail-body .callout.erd-key');
     assert.equal(await key.count(), 1, 'the key is tied to the diagram above it');
-    assert.equal(await key.isVisible(), false, 'hidden in the reading pane');
+    assert.equal(await key.isVisible(), true, 'visible in the reading pane, without expanding');
     assert.ok(await key.locator('.erd-glyph').count() > 0, 'its symbols are drawn');
+    assert.match(await key.innerText(), /each CARRIER is linked to zero or more PARCEL/, 'each relationship is in words');
+    const figure = (await page.locator('.mermaid').first().boundingBox())!;
+    const inPage = (await key.boundingBox())!;
+    assert.ok(inPage.y >= figure.y + figure.height - 4, 'below the diagram, not over it');
     await page.click('.mermaid-tools button[data-act=expand]');
     assert.equal(await key.isVisible(), true, 'shown over the expanded diagram');
     const box = (await key.boundingBox())!;
     assert.ok(box.x >= 0 && box.y >= 0 && box.x + box.width <= 1400 && box.y + box.height <= 800, 'inside the window');
     await page.keyboard.press('Escape');
-    assert.equal(await key.isVisible(), false, 'hidden again once collapsed');
+    const back = (await key.boundingBox())!;
+    assert.ok(back.y >= figure.y + figure.height - 4, 'back under the diagram once collapsed');
+  });
+
+  view('the ER diagram is drawn in the viewer colours, with a primary key in the accent', async () => {
+    await page.evaluate(() => window.__OKF_VIEW__.show('parcel-tracker/data-model'));
+    await page.waitForSelector('.mermaid[data-state=rendered]', { timeout: 30_000 });
+    const look = await page.evaluate(() => {
+      const css = (el: Element | null, prop: string) => (el ? getComputedStyle(el).getPropertyValue(prop) : '');
+      const root = getComputedStyle(document.documentElement);
+      const svg = document.querySelector('.mermaid svg')!;
+      return {
+        accent: root.getPropertyValue('--accent').trim(),
+        line: css(svg.querySelector('.relationshipLine'), 'stroke-width'),
+        key: css(svg.querySelector('.attribute-keys .nodeLabel, .attribute-keys p'), 'color'),
+      };
+    });
+    assert.equal(look.line, '1.6px', 'relationship lines are heavier than Mermaid default');
+    assert.ok(look.key && look.key !== 'rgb(0, 0, 0)', 'key column has its own colour');
   });
 
   view('reading view hides the list or graph, shows the concept, and restores each view', async () => {

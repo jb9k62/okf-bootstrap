@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **One look and one key for ER diagrams**: the three places that show an entity relationship
+  diagram now agree. The generated key leads with each relationship in words ("each CARRIER is
+  linked to zero or more PARCEL; each PARCEL is linked to exactly one CARRIER", up to six, then a
+  count) instead of one worked example, and no longer explains the solid line when every line is
+  solid. The viewer shows the key under the diagram instead of only when it is expanded, draws
+  each symbol without the raw `||` text beside it, and restyles Mermaid's ER diagram to match the
+  `sql-erd` widget (tinted table headers, accent-coloured `PK`/`FK`, heavier lines and line
+  ends, light and dark). The widget keeps a key under its diagram (only the ends that schema
+  uses, in the same words) and its line tooltips give the same sentence. Re-run `npm run
+  okf:fix` to refresh existing keys.
 - **Better on phones**: the viewer's top bar is now a search box and one swipeable row of
   controls (it used to fill half the screen), the graph is shorter and its colour key is a single
   line. Widgets get touch-sized controls, full-width sliders and two-column short lists on narrow

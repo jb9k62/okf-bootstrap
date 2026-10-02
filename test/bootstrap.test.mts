@@ -190,14 +190,16 @@ describe('okf-view ER diagram keys', () => {
     const fixed = run(VIEW, [dir, '--validate', '--strict', '--fix']);
     assert.equal(fixed.code, 0, fixed.out);
     const text = read(file);
-    // Only the symbols this diagram uses, each cardinality once, plus a worked example.
+    // Each relationship in words first, then only the symbols this diagram uses.
+    assert.match(text, /- `TEAM \|\|--o\{ PLAYER`: each TEAM is linked to zero or more PLAYER; each PLAYER is linked to exactly one TEAM\./);
+    assert.match(text, /- `PLAYER \}o\.\.o\| COACH`: each PLAYER is linked to zero or one COACH; each COACH is linked to zero or more PLAYER\./);
+    assert.ok(text.indexOf('TEAM ||--o{ PLAYER') < text.indexOf('exactly one\n'), 'sentences come before the symbol list');
     assert.match(text, /- `\|\|`: exactly one/);
     assert.match(text, /- `\}o` and `o\{`: zero or more/);
     assert.match(text, /- `\|o` and `o\|`: zero or one/);
     assert.doesNotMatch(text, /one or more/);
-    assert.match(text, /solid, identifying[\s\S]*dashed, non-identifying/);
+    assert.match(text, /`--` solid, identifying[\s\S]*`\.\.` dashed, non-identifying/);
     assert.match(text, /`PK` primary key, `FK` foreign key/);
-    assert.match(text, /Example: `TEAM \|\|--o\{ PLAYER` reads as: each TEAM is linked to zero or more PLAYER; each PLAYER is linked to exactly one TEAM/);
     assert.match(text, /<!-- \/okf:erd-legend -->\n\nAfter\./, 'text after the key stays separated');
 
     const again = run(VIEW, [dir, '--validate', '--strict', '--fix']);
@@ -235,6 +237,21 @@ describe('okf-view ER diagram keys', () => {
     const r = run(VIEW, [dir, '--validate', '--strict', '--fix']);
     assert.equal(r.code, 0, r.out);
     assert.equal(read(file), before);
+  });
+
+  it('says nothing about line style when every line is solid', () => {
+    const { dir, file } = bundle('erd-solid', '```mermaid\nerDiagram\n    TEAM ||--o{ PLAYER : fields\n```');
+    run(VIEW, [dir, '--validate', '--fix']);
+    assert.doesNotMatch(read(file), /solid|dashed|identifying/);
+  });
+
+  it('writes the first few relationships in words and counts the rest', () => {
+    const lines = Array.from({ length: 9 }, (_, i) => `    A${i} ||--o{ B${i} : has`);
+    const { dir, file } = bundle('erd-many', ['```mermaid', 'erDiagram', ...lines, '```'].join('\n'));
+    run(VIEW, [dir, '--validate', '--fix']);
+    const text = read(file);
+    assert.equal(text.match(/each A\d is linked to/g)?.length, 6);
+    assert.match(text, /\.\.\.and 3 more, read the same way/);
   });
 
   it('gives an entity-only diagram the full reference key', () => {

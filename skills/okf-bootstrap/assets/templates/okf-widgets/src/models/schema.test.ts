@@ -4,6 +4,8 @@ import { layout } from './layout.ts';
 import {
   deleteImpact,
   joinPath,
+  describe as describeRelation,
+  ends,
   notation,
   relations,
   review,
@@ -42,6 +44,15 @@ describe('relations and notation', () => {
     expect(notation(byId['order.customer_id']!)).toBe('||--o{'); // mandatory parent, many children
     expect(notation(byId['order.coupon_id']!)).toBe('|o--o{'); // nullable: the parent is optional
     expect(notation(byId['customer_profile.customer_id']!)).toBe('||--o|'); // the key is the PK: one-to-one
+  });
+
+  it('says each relationship in words, from either side', () => {
+    expect(ends(byId['order.customer_id']!)).toEqual({ parent: 'one', child: 'zeroMany' });
+    expect(describeRelation(byId['order.customer_id']!)).toBe(
+      'each order is linked to exactly one customer; each customer is linked to zero or more order',
+    );
+    expect(describeRelation(byId['order.coupon_id']!)).toMatch(/to zero or one coupon; .* zero or more order$/);
+    expect(describeRelation(byId['customer_profile.customer_id']!)).toMatch(/exactly one customer; .* zero or one customer_profile$/);
   });
 
   it('leaves out a foreign key whose parent is not in the schema', () => {

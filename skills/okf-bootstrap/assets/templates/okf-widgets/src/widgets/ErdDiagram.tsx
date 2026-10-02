@@ -6,7 +6,7 @@
 
 import type { Schema } from '../models/ddl.ts';
 import { BOX, type Box, layout as placeTables } from '../models/layout.ts';
-import { notation, relations, type Relation } from '../models/schema.ts';
+import { describe, END_WORDS, ends, relations, type End, type Relation } from '../models/schema.ts';
 
 export type Mark = 'pick' | 'path' | 'delete' | 'nullify' | 'blocked' | 'good' | 'warn' | 'info';
 
@@ -33,7 +33,7 @@ function shortType(type: string): string {
 
 const clip = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
 
-interface End {
+interface Point {
   x: number;
   y: number;
   /** +1 when the line leaves the box to the right, -1 to the left. */
@@ -43,8 +43,8 @@ interface End {
 function route(relation: Relation, parent: Box, child: Box) {
   const parentY = parent.rows[relation.key.refColumns[0] ?? ''] ?? parent.y + BOX.header / 2;
   const childY = child.rows[relation.key.columns[0] ?? ''] ?? child.y + BOX.header / 2;
-  let start: End;
-  let end: End;
+  let start: Point;
+  let end: Point;
   if (parent.x + parent.width <= child.x) {
     start = { x: parent.x + parent.width, y: parentY, dir: 1 };
     end = { x: child.x, y: childY, dir: -1 };
@@ -61,7 +61,7 @@ function route(relation: Relation, parent: Box, child: Box) {
   return { d, parentEnd: start, childEnd: end };
 }
 
-function Glyph({ kind, end }: { kind: 'one' | 'zeroOne' | 'zeroMany'; end: End }) {
+function Glyph({ kind, end }: { kind: End; end: Point }) {
   const at = (distance: number) => end.x + end.dir * distance;
   const bar = (distance: number) => <line x1={at(distance)} y1={end.y - 5} x2={at(distance)} y2={end.y + 5} />;
   const ring = (distance: number) => <circle cx={at(distance)} cy={end.y} r={4} className="okfw-erd-ring" />;
@@ -78,7 +78,7 @@ function Glyph({ kind, end }: { kind: 'one' | 'zeroOne' | 'zeroMany'; end: End }
 }
 
 /** One line end, drawn as in the diagram, for the key under it. `mirrored` puts the entity on the right. */
-export function KeyGlyph({ kind, mirrored = false }: { kind: 'one' | 'zeroOne' | 'zeroMany'; mirrored?: boolean }) {
+export function KeyGlyph({ kind, mirrored = false }: { kind: End; mirrored?: boolean }) {
   return (
     <svg className="okfw-erd-keyglyph" width={36} height={16} viewBox="0 0 36 16" aria-hidden="true">
       <g className="okfw-erd-edge" transform={mirrored ? 'translate(36,0) scale(-1,1)' : undefined}>
@@ -86,6 +86,31 @@ export function KeyGlyph({ kind, mirrored = false }: { kind: 'one' | 'zeroOne' |
         <Glyph kind={kind} end={{ x: 0, y: 8, dir: 1 }} />
       </g>
     </svg>
+  );
+}
+
+const KEY_HINTS: Readonly<Record<End, string>> = {
+  one: 'a NOT NULL key',
+  zeroOne: 'a nullable or unique key',
+  zeroMany: 'the many side',
+};
+
+/**
+ * What the line ends mean, in the words the viewer's ER key uses. Lists only the ends these
+ * relationships draw, in the order a reader meets them, so a small schema gets a short key.
+ */
+export function ErdKey({ relations: shown }: { relations: readonly Relation[] }) {
+  const used = new Set<End>(shown.flatMap((relation) => Object.values(ends(relation))));
+  const kinds = (['one', 'zeroOne', 'zeroMany'] as const).filter((kind) => used.has(kind));
+  if (kinds.length === 0) return null;
+  return (
+    <ul className="okfw-plain okfw-erd-key" aria-label="How to read the line ends">
+      {kinds.map((kind) => (
+        <li key={kind}>
+          <KeyGlyph kind={kind} mirrored={kind === 'zeroMany'} /> {END_WORDS[kind]} <span>{KEY_HINTS[kind]}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -113,19 +138,7 @@ export default function ErdDiagram({
     <div className="okfw-erd" data-fit={fit || expanded} data-expanded={expanded || undefined}>
       {expanded && (
         <div className="okfw-erd-topbar">
-          <ul className="okfw-plain okfw-erd-key" aria-label="How to read the line ends">
-            <li>
-              <KeyGlyph kind="one" /> <code>||</code> exactly one <span>NOT NULL key</span>
-            </li>
-            <li>
-              <KeyGlyph kind="zeroOne" /> <code>|o</code> <code>o|</code> zero or one{' '}
-              <span>nullable or unique key</span>
-            </li>
-            <li>
-              <KeyGlyph kind="zeroMany" mirrored /> <code>o{'{'}</code> zero or more <span>the many side</span>
-            </li>
-            <li className="okfw-muted">Drawn from the constraints, not by hand.</li>
-          </ul>
+          <ErdKey relations={all} />
           <button type="button" className="okfw-erd-close" onClick={onCollapse}>
             Close (Esc)
           </button>
@@ -150,10 +163,10 @@ export default function ErdDiagram({
               className="okfw-erd-edge"
               data-heavy={marks.relations.has(relation.id) || undefined}
             >
-              <title>{`${relation.parent} ${notation(relation)} ${relation.child}`}</title>
+              <title>{describe(relation)}</title>
               <path d={d} fill="none" />
-              <Glyph kind={relation.mandatory ? 'one' : 'zeroOne'} end={parentEnd} />
-              <Glyph kind={relation.single ? 'zeroOne' : 'zeroMany'} end={childEnd} />
+              <Glyph kind={ends(relation).parent} end={parentEnd} />
+              <Glyph kind={ends(relation).child} end={childEnd} />
             </g>
           );
         })}

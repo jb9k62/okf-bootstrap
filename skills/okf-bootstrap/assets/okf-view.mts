@@ -417,6 +417,9 @@ const ERD_CARDINALITIES = [
   { left: '}|', right: '|{', means: 'one or more' },
 ] as const;
 
+// Relationships written out in the key; a bigger diagram gets the first few and a count.
+const ERD_SENTENCES = 6;
+
 const ERD_RELATIONSHIP_RE = /(\|o|\|\||\}o|\}\|)(--|\.\.)(o\||\|\||o\{|\|\{)/g;
 const ERD_ENTITY = String.raw`("[^"]+"|[\w-]+)(?:\[[^\]]*\])?`;
 const ERD_LINE_RE = new RegExp(
@@ -454,8 +457,9 @@ function scanFences(lines: string[]): Fence[] {
 const erdName = (raw: string): string => raw.replace(/^"|"$/g, '');
 
 /**
- * The key for one erDiagram's source: the symbols and line styles it uses. A diagram with no
- * relationship in symbol form (entities only, or written in words) gets the full reference.
+ * The key for one erDiagram's source: each relationship in words, then the symbols and line
+ * styles it uses. A diagram with no relationship in symbol form (entities only, or written in
+ * words) gets the full reference.
  */
 function erdLegend(source: string): string[] {
   const used = new Set<string>();
@@ -473,37 +477,46 @@ function erdLegend(source: string): string[] {
   }
 
   const out = ['> [!note] Reading the diagram'];
+
+  // Each relationship in words, from both sides: this is what the line ends stand for, so a
+  // reader gets the answer first and the symbols after. The widget's `describe` says the same.
+  const meaning = (glyph: string) =>
+    ERD_CARDINALITIES.find((c) => c.left === glyph || c.right === glyph)!.means;
+  const found: string[] = [];
+  for (const line of source.split(/\r?\n/)) {
+    const m = line.match(ERD_LINE_RE);
+    if (!m) continue;
+    const [left, right] = [erdName(m[1]!), erdName(m[5]!)];
+    found.push(
+      `> - \`${left} ${m[2]}${m[3]}${m[4]} ${right}\`: each ${left} is linked to ${meaning(m[4]!)} ${right}; ` +
+        `each ${right} is linked to ${meaning(m[2]!)} ${left}.`,
+    );
+  }
+  out.push(...found.slice(0, ERD_SENTENCES));
+  if (found.length > ERD_SENTENCES) {
+    out.push(`> - ...and ${found.length - ERD_SENTENCES} more, read the same way.`);
+  }
+
   for (const c of ERD_CARDINALITIES) {
     if (used.has(c.left) || used.has(c.right)) {
       const glyphs = c.left === c.right ? `\`${c.left}\`` : `\`${c.left}\` and \`${c.right}\``;
       out.push(`> - ${glyphs}: ${c.means}`);
     }
   }
-  const lines: string[] = [];
-  if (solid) lines.push('`--` solid, identifying (the child cannot exist without its parent)');
-  if (dashed) lines.push('`..` dashed, non-identifying');
-  if (lines.length) out.push(`> - ${lines.join('; ')}`);
+  // Solid is the default, so it only needs saying when a dashed line sits beside it.
+  if (dashed) {
+    out.push(
+      solid
+        ? '> - `--` solid, identifying (the child cannot exist without its parent); `..` dashed, non-identifying'
+        : '> - `..` dashed, non-identifying',
+    );
+  }
   const keys = ['PK', 'FK', 'UK'].filter(
     (k) => reference || new RegExp(String.raw`\b${k}\b`).test(source),
   );
   const names = { PK: 'primary key', FK: 'foreign key', UK: 'unique key' } as const;
   if (keys.length) {
     out.push(`> - Columns: ${keys.map((k) => `\`${k}\` ${names[k as keyof typeof names]}`).join(', ')}`);
-  }
-
-  // A worked example from the diagram itself: the marker next to an entity says how many of
-  // that entity each row on the other side is linked to.
-  for (const line of source.split(/\r?\n/)) {
-    const m = line.match(ERD_LINE_RE);
-    if (!m) continue;
-    const meaning = (glyph: string) =>
-      ERD_CARDINALITIES.find((c) => c.left === glyph || c.right === glyph)!.means;
-    const [left, right] = [erdName(m[1]!), erdName(m[5]!)];
-    out.push(
-      `> - Example: \`${left} ${m[2]}${m[3]}${m[4]} ${right}\` reads as: each ${left} is linked to ` +
-        `${meaning(m[4]!)} ${right}; each ${right} is linked to ${meaning(m[2]!)} ${left}.`,
-    );
-    break;
   }
   return [ERD_LEGEND_OPEN, ...out, ERD_LEGEND_CLOSE];
 }
@@ -1142,8 +1155,8 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
 }
 .prose .erd-glyph { display: inline-block; vertical-align: middle; line-height: 0; color: var(--text); }
 .prose .erd-glyph svg { overflow: visible; }
-.prose .erd-glyph path { fill: none; stroke: currentColor; stroke-width: 1.4; }
-.prose .erd-glyph circle { fill: color-mix(in srgb, var(--callout-accent) 9%, var(--surface)); stroke: currentColor; stroke-width: 1.4; }
+.prose .erd-glyph path { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.prose .erd-glyph circle { fill: var(--surface); stroke: currentColor; stroke-width: 1.5; }
 .prose .callout-note { --callout-accent: #2563eb; }
 .prose .callout-tip { --callout-accent: #0d9488; }
 .prose .callout-important { --callout-accent: #7c3aed; }
@@ -1296,8 +1309,11 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
   background: var(--bg);
 }
 .prose .mermaid.expanded .mermaid-canvas { background: var(--surface); }
-/* The ER diagram key (see drawErdKeys) shows only over the expanded diagram, as a panel in its corner. */
-.prose .callout.erd-key { display: none; }
+/* The ER diagram key (see drawErdKeys) sits under its diagram, and becomes a panel in the corner
+   while the diagram is expanded. */
+.prose .callout.erd-key { margin-top: -0.6em; font-size: 14px; }
+.prose .callout.erd-key ul { margin: 0; padding-left: 1.2em; }
+.prose .callout.erd-key li { margin: 0 0 5px; }
 .prose .mermaid.expanded + .callout.erd-key {
   display: block;
   position: fixed;
@@ -1775,6 +1791,27 @@ const JS = `
     }
   }
 
+  // --- ER diagram look --------------------------------------------------------
+  // Mermaid draws an erDiagram in its own greys. This restyles it with the viewer's colours, so
+  // it reads like the sql-erd widget's diagram: a tinted header, the primary key in the accent
+  // colour, and lines and line ends heavy enough to read at the default zoom. Line ends are
+  // markers sized by the line's width, so a wider line also makes them larger. The page's
+  // custom properties reach into the inline svg, so this follows the light and dark themes.
+  const ER_THEME_CSS = [
+    ".relationshipLine { stroke: var(--text-muted) !important; stroke-width: 1.6px; }",
+    ".marker { stroke: var(--text-muted) !important; stroke-width: 1.1 !important; }",
+    ".marker circle { fill: var(--surface) !important; }",
+    ".node .outer-path path:first-child { fill: color-mix(in srgb, var(--accent) 14%, var(--surface)) !important; }",
+    ".node .row-rect-odd path:first-child, .node .row-rect-even path:first-child { fill: var(--surface) !important; }",
+    ".node .outer-path path:last-child, .node [class^=row-rect] path:last-child { stroke: var(--border-strong) !important; stroke-width: 1px !important; }",
+    ".node .label.name { font-weight: 700; }",
+    ".node .label.name .nodeLabel, .node .label.name p { color: var(--heading) !important; }",
+    ".node .nodeLabel, .node .label { color: var(--text); fill: var(--text); }",
+    ".node .attribute-type .nodeLabel, .node .attribute-type p { color: var(--text-muted) !important; }",
+    ".node .attribute-keys .nodeLabel, .node .attribute-keys p { color: var(--accent) !important; font-weight: 700; }",
+    ".edgeLabel, .edgeLabel p, .labelBkg { background: var(--surface) !important; color: var(--text-muted) !important; }",
+  ].join("\\n");
+
   // --- ER diagram keys --------------------------------------------------------
   // The generated key under an erDiagram names Mermaid's symbols as text (||--o{). Here each
   // one is drawn the way the diagram draws it, with the text kept beside it for authoring.
@@ -1829,11 +1866,11 @@ const JS = `
           last.textContent = parts[2];
           code.replaceWith(first, " ", glyph, " ", last);
         } else if (text === "--" || text === "..") {
-          code.before(erdSvg(null, null, text === "..", 36, text), " ");
+          code.replaceWith(erdSvg(null, null, text === "..", 36, text));
         } else if (ERD_LEFT[text] || ERD_RIGHT[text]) {
           // Right-hand spellings are the mirror image of the left-hand ones.
           const right = ERD_RIGHT[text] && text !== "||" && !ERD_LEFT[text];
-          code.before(erdSvg(right ? null : ERD_LEFT[text], right ? ERD_RIGHT[text] : null, false, 36, text), " ");
+          code.replaceWith(erdSvg(right ? null : ERD_LEFT[text], right ? ERD_RIGHT[text] : null, false, 36, text));
         }
       }
     }
@@ -2064,10 +2101,13 @@ const JS = `
       for (const { figure, source } of figures) showDiagramError(figure, source, "Mermaid did not load");
       return;
     }
-    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: theme === "dark" ? "dark" : "neutral" });
 
     for (const { figure, source } of figures) {
       const diagramId = "okf-diagram-" + ++diagramCount;
+      // The ER look is Mermaid theme CSS, which applies to the whole diagram it is given, so
+      // only an erDiagram gets it.
+      const isEr = /^\\s*(?:%%.*\\n\\s*)*erDiagram\\b/.test(source);
+      mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: theme === "dark" ? "dark" : "neutral", themeCSS: isEr ? ER_THEME_CSS : "" });
       try {
         const { svg } = await mermaid.render(diagramId, source);
         if (token !== renderToken) return; // another concept was opened meanwhile

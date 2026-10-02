@@ -36,11 +36,11 @@ erDiagram
 
 <!-- okf:erd-legend -->
 > [!note] Reading the diagram
+> - `CARRIER ||--o{ PARCEL`: each CARRIER is linked to zero or more PARCEL; each PARCEL is linked to exactly one CARRIER.
+> - `PARCEL ||--o{ TRACKING_EVENT`: each PARCEL is linked to zero or more TRACKING_EVENT; each TRACKING_EVENT is linked to exactly one PARCEL.
 > - `||`: exactly one
 > - `}o` and `o{`: zero or more
-> - `--` solid, identifying (the child cannot exist without its parent)
 > - Columns: `PK` primary key, `FK` foreign key
-> - Example: `CARRIER ||--o{ PARCEL` reads as: each CARRIER is linked to zero or more PARCEL; each PARCEL is linked to exactly one CARRIER.
 <!-- /okf:erd-legend -->
 
 - A parcel's `status` is derived from its latest event by `occurred_at`, not by insert order:

@@ -54,6 +54,30 @@ export function notation(relation: Relation): string {
   return `${relation.mandatory ? '||' : '|o'}--${relation.single ? 'o|' : 'o{'}`;
 }
 
+/** One end of a relationship line, by how many rows sit at it. */
+export type End = 'one' | 'zeroOne' | 'zeroMany';
+
+/** The words for each end. The viewer's generated ER key uses the same ones; keep them in step. */
+export const END_WORDS: Readonly<Record<End, string>> = {
+  one: 'exactly one',
+  zeroOne: 'zero or one',
+  zeroMany: 'zero or more',
+};
+
+/** How many parent rows each child row has (`parent`), and how many child rows each parent has (`child`). */
+export function ends(relation: Relation): { parent: End; child: End } {
+  return { parent: relation.mandatory ? 'one' : 'zeroOne', child: relation.single ? 'zeroOne' : 'zeroMany' };
+}
+
+/** A relationship in words, read from either side: the reading the line ends stand for. */
+export function describe(relation: Relation): string {
+  const { parent, child } = ends(relation);
+  return (
+    `each ${relation.child} is linked to ${END_WORDS[parent]} ${relation.parent}; ` +
+    `each ${relation.parent} is linked to ${END_WORDS[child]} ${relation.child}`
+  );
+}
+
 // --- Design review -------------------------------------------------------------------
 
 export interface Target {

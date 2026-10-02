@@ -103,7 +103,7 @@ refreshed, and older `.mjs` copies are removed.
 - Short concepts, plain words, link instead of repeating. Bundle-root links
   (`[text](/path/concept.md)`) or relative ones; a link to a missing file is an issue.
 - Mermaid: `fill`, `stroke` and `color` on every `classDef`; any `%%{init}%%` on one line.
-- Every `erDiagram` is followed by the generated key that explains `||--o{`
+- Every `erDiagram` is followed by the generated key that reads each relationship in words and explains `||--o{`
   and friends. Never write it by hand: run `npm run okf:fix`; `okf:validate` fails without it.
   For a complicated schema, or when asked, add a ` ```widget ` with `sql-erd` and the schema's
   SQL (scenarios, design review, join paths, delete impact): see EXPLAINERS.md.

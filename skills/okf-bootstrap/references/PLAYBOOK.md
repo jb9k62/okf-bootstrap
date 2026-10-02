@@ -238,9 +238,11 @@ loads from a CDN). Set `fill`, `stroke`, and `color` on every `classDef`, and ke
 parses as a bad directive.
 
 **ER diagrams get a key.** Mermaid's crow's-foot symbols (`||--o{`) are hard to remember, so
-every `erDiagram` is followed by a small generated key: the symbols
-that diagram uses and what they mean, the line style, `PK`/`FK`, and one relationship read out
-in words. It is markdown (between `<!-- okf:erd-legend -->` markers), so GitHub and editors show
+every `erDiagram` is followed by a small generated key: each relationship read out in words
+from both sides (up to six; a bigger diagram gets the first few and a count), then the symbols
+that diagram uses and what they mean, `PK`/`FK`, and the line style when it mixes solid and
+dashed. The viewer shows it under the diagram and draws each symbol as the diagram does; the
+`sql-erd` widget says the same things in the same words. It is markdown (between `<!-- okf:erd-legend -->` markers), so GitHub and editors show
 it too. Do not write it by hand: `okf:validate` reports a missing or out-of-date key as an
 `erd-legend` issue, and `npm run okf:fix` writes or refreshes every one. A complicated schema
 (more than a handful of tables), or a reader who asks, also gets the `sql-erd` widget: see

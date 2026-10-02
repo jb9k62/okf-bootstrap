@@ -83,7 +83,7 @@ A hundred clients use exponential backoff with no jitter. What does the server s
 ````
 
 **Database schemas** get two things. Every Mermaid `erDiagram` is followed by a generated key that
-says what `||--o{` and its relatives mean, enforced by the validator and written by `npm run
+reads each relationship out in words and says what `||--o{` and its relatives mean, enforced by the validator and written by `npm run
 okf:fix`. A complicated schema can also carry the `sql-erd` widget: paste the `CREATE TABLE`
 statements under its name and the reader gets a small and a large scenario, a design review of
 what is well designed and what is not, the join path between two tables, and what deleting a row

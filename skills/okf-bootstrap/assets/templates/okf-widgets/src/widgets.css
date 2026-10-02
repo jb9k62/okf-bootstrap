@@ -331,7 +331,7 @@
 .okfw-erd-edge path,
 .okfw-erd-edge line {
   stroke: var(--text-muted, #64748b);
-  stroke-width: 1.3;
+  stroke-width: 1.5;
   fill: none;
 }
 .okfw-erd-edge[data-heavy] path,
@@ -340,9 +340,9 @@
   stroke-width: 2.4;
 }
 .okfw-erd-ring {
-  fill: var(--surface-2, #f1f5f9);
+  fill: var(--surface, #fff);
   stroke: var(--text-muted, #64748b);
-  stroke-width: 1.3;
+  stroke-width: 1.5;
 }
 .okfw-erd-edge[data-heavy] .okfw-erd-ring {
   stroke: var(--accent, #2563eb);
@@ -480,8 +480,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: 4px 22px;
-  margin: 0;
+  margin: 6px 0 0;
   font-size: 12.5px;
+}
+.okfw-erd-topbar .okfw-erd-key {
+  margin: 0;
 }
 .okfw-erd-key li span {
   color: var(--text-muted, #64748b);

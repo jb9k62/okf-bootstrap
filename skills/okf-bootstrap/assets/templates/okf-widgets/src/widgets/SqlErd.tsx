@@ -26,7 +26,7 @@ import {
   type Finding,
   type Safeguards,
 } from '../models/schema.ts';
-import ErdDiagram, { type Mark, type Marks } from './ErdDiagram.tsx';
+import ErdDiagram, { ErdKey, type Mark, type Marks } from './ErdDiagram.tsx';
 
 /** What a block with no SQL shows, so a bare ```widget sql-erd``` still works. */
 const SAMPLE = `-- scenario: Sample | Three tables: replace this by writing SQL under the widget name
@@ -187,6 +187,7 @@ export default function SqlErd({ source }: { source: string }) {
             onCollapse={() => setExpanded(false)}
             onPick={onPick}
           />
+          {!expanded && <ErdKey relations={all} />}
         </>
       )}
 

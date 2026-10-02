@@ -94,7 +94,7 @@ export default function HttpConcurrency({ source }: { source: string }) {
       <Presets presets={PRESETS} active={world.preset?.id ?? null} probe="multiplex" onChoose={world.choose} />
 
       <div className="okfw-columns">
-        <section>
+        <section className="okfw-http-controls">
           <Slider
             label={shared ? 'Streams in flight' : 'Connections'}
             value={limit}
@@ -120,11 +120,14 @@ export default function HttpConcurrency({ source }: { source: string }) {
         </section>
         <section>
           <h4>Requests ({requests.length})</h4>
-          <ul className="okfw-plain okfw-muted">
+          <ul className="okfw-plain okfw-http-requests">
             {requests.map((request) => (
               <li key={request.id}>
-                <code>{request.id}</code> {ms(request.ms)}
-                {request.after.length > 0 && <> after {request.after.join(', ')}</>}
+                <code>{request.id}</code>
+                <span>
+                  {ms(request.ms)}
+                  {request.after.length > 0 && <span className="okfw-muted"> after {request.after.join(', ')}</span>}
+                </span>
               </li>
             ))}
           </ul>
@@ -164,7 +167,7 @@ export default function HttpConcurrency({ source }: { source: string }) {
         )}
       </div>
       <p className="okfw-reason okfw-gantt-axis">
-        <span>0</span>
+        <span>0 ms</span>
         <span>{ms(result.totalMs)}</span>
       </p>
 

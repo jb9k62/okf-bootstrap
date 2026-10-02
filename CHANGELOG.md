@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **One layout for every widget**: slider rows share a label, track and value grid; the presets
+  sit above a divider, selected presets are tinted, notes carry an accent edge, and the result
+  block is set off by a rule. Applies to all widgets, not only the HTTP one.
+- **Tidier HTTP concurrency widget**: the sliders line up as label, track and value columns, the
+  request list is a two-column grid, and the waterfall sits in its own bordered panel with
+  white lanes so its edges are clear.
 - **One look and one key for ER diagrams**: the three places that show an entity relationship
   diagram now agree. The generated key leads with each relationship in words ("each CARRIER is
   linked to zero or more PARCEL; each PARCEL is linked to exactly one CARRIER", up to six, then a

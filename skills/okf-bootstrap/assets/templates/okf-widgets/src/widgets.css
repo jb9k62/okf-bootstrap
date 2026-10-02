@@ -107,9 +107,11 @@
 }
 .okfw-note {
   background: var(--surface-2, #f1f5f9);
+  border-left: 3px solid var(--accent, #2563eb);
 }
 .okfw-warn {
   background: var(--okfw-warn-bg);
+  border-left: 3px solid #f59e0b;
 }
 .okfw-error {
   background: var(--okfw-bad-bg);
@@ -123,7 +125,12 @@
   grid-template-columns: max-content 1fr;
   gap: 4px 12px;
   align-items: baseline;
-  margin: 10px 0 0;
+  margin: 14px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border, #e2e8f0);
+}
+.okfw-facts dd {
+  font-variant-numeric: tabular-nums;
 }
 .okfw-facts dt {
   color: var(--text-muted, #64748b);
@@ -557,13 +564,32 @@
   color: var(--accent, #2563eb);
 }
 
-/* http-concurrency: the waterfall */
+/* http-concurrency: controls, request list and the waterfall */
+.okfw-http-requests {
+  display: grid;
+  gap: 4px;
+}
+.okfw-http-requests li {
+  display: grid;
+  grid-template-columns: 5.5em 1fr;
+  gap: 8px;
+  align-items: baseline;
+}
+.okfw-http-requests code {
+  justify-self: start;
+}
 .okfw-gantt {
   display: grid;
-  gap: 3px;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid var(--border-strong, #cbd5e1);
+  border-radius: 6px;
+  background: var(--surface-2, #f1f5f9);
 }
 .okfw-gantt .okfw-track {
-  height: 24px;
+  height: 26px;
+  border-color: var(--border, #e2e8f0);
+  background: var(--surface, #fff);
 }
 .okfw-gantt-bar,
 .okfw-gantt-setup {
@@ -593,7 +619,7 @@
 .okfw-gantt-axis {
   display: flex;
   justify-content: space-between;
-  margin: 2px 0 0;
+  margin: 4px 8px 0;
 }
 
 /* css-specificity */
@@ -790,6 +816,27 @@
 .okfw-presets button {
   line-height: 1.3;
 }
+.okfw-presets {
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border, #e2e8f0);
+}
+.okfw-presets button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--accent, #2563eb) 14%, transparent);
+  font-weight: 600;
+}
+/* A slider row is always label | track | value, so every widget's controls share one grid. */
+.okfw-row:has(> input[type='range']) {
+  display: grid;
+  grid-template-columns: minmax(5.5em, 9em) minmax(0, 1fr) 6.5em;
+  gap: 4px 10px;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+.okfw-row:has(> input[type='range']) input[type='range'] {
+  width: 100%;
+  margin: 0;
+}
 
 /* Narrow screens: comfortable touch targets, less padding, and sliders that fill the width. */
 @media (max-width: 600px) {
@@ -813,7 +860,6 @@
   .okfw input[type='range'] {
     width: 100%;
     max-width: 100%;
-    margin: 4px 0;
   }
   .okfw-row,
   .okfw-toggle {

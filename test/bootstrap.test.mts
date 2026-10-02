@@ -94,9 +94,11 @@ describe('bootstrap', () => {
     fs.mkdirSync(path.join(dir, 'okf'));
     fs.mkdirSync(path.join(dir, 'scripts'));
     fs.writeFileSync(path.join(dir, 'scripts', 'okf-view.mjs'), '// old');
+    fs.writeFileSync(path.join(dir, 'scripts', 'okf-search.mjs'), '// the project\'s own');
     const r = run(BOOTSTRAP, [dir, '--tools-only']);
     assert.equal(r.code, 0, r.out);
     assert.ok(!fs.existsSync(path.join(dir, 'scripts', 'okf-view.mjs')));
+    assert.ok(fs.existsSync(path.join(dir, 'scripts', 'okf-search.mjs')), 'only the tools that shipped as .mjs are removed');
     assert.match(r.out, /Removed[\s\S]*scripts\/okf-view\.mjs/);
     assert.equal(pkgOf(dir).scripts['okf:view'], 'node scripts/okf-view.mts okf');
     assert.ok(!fs.existsSync(path.join(dir, 'okf', 'index.md')), '--tools-only leaves okf/ alone');

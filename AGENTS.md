@@ -13,6 +13,8 @@ demo, docs) supports it.
 | `skills/okf-bootstrap/assets/bootstrap.mts` | Scaffolder: copies templates into a target project |
 | `skills/okf-bootstrap/assets/okf-view.mts` | Validator + graph viewer; emits one self-contained `viz.html` (~3000 lines) |
 | `skills/okf-bootstrap/assets/okf-mermaid.mts` | Mermaid parse gate and headless-Chromium render gate |
+| `skills/okf-bootstrap/assets/okf-search.mts` | Ranked, freshness-aware search (`search`, `show`, `related`, `facets`, `stale`) with an on-disk cache |
+| `skills/okf-bootstrap/assets/okf-core.mts` | Parsing shared by the viewer and search: frontmatter, trust tier, staleness, links |
 | `skills/okf-bootstrap/assets/templates/` | Files copied into target projects (`okf/`, concept and explainer templates, `okf-widgets/` React workspace) |
 | `skills/okf-bootstrap/references/` | `PLAYBOOK.md`, `EXPLAINERS.md`, and the vendored OKF spec |
 | `examples/demo/okf/` | "Parcel tracker" demo bundle; used by `npm run demo`, tests and screenshots |
@@ -47,8 +49,8 @@ do not prove it reads well.
 
 - **Erasable TypeScript only**: no enums, namespaces or parameter properties. Imports name
   the real `.mts` extension. `tsconfig.json` enforces this.
-- **Tools must stay dependency-light.** `bootstrap.mts`, `okf-view.mts` and `okf-mermaid.mts`
-  are copied into user projects as `scripts/okf-*.mts`. Don't import anything from outside
+- **Tools must stay dependency-light.** `bootstrap.mts`, `okf-view.mts`, `okf-mermaid.mts`,
+  `okf-search.mts` and `okf-core.mts` are copied into user projects as `scripts/okf-*.mts`. Don't import anything from outside
   `skills/okf-bootstrap/assets/`, and resolve templates relative to the file itself.
 - **`viz.html` is one file**: no build step, libraries inlined. Don't add a bundler or a
   network fetch to the viewer.

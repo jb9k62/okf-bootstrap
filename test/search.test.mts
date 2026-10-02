@@ -105,6 +105,22 @@ describe('okf-search ranking and the spec', () => {
     assert.deepEqual(ids(json(cwd, ['search', 'jitter zebra', '--all'])), []);
   });
 
+  it('ranks the concept a prefix names above words that merely share it', () => {
+    const files: Record<string, string> = {
+      'a.md': doc('title: Architecture', '# Architecture\n\nRetains retrieves retained retrofit retort.'),
+      'retry.md': doc('title: Retry policy\ntags: [retries]', '# Retry\n\nBackoff.'),
+    };
+    assert.equal(ids(json(bundle('prefix', files), ['search', 'ret']))[0], 'retry');
+  });
+
+  it('treats status case-insensitively and rejects nonsense queries and flags', () => {
+    const c = bundle('status', { ...FILES, 'up.md': doc('title: Up\nstatus: Deprecated', '# Up') });
+    assert.deepEqual(ids(json(c, ['search', '--status', 'deprecated'])).sort(), ['cache', 'up']);
+    assert.equal(search(c, ['search', '--status', 'foo']).code, 2);
+    assert.equal(search(c, ['search', '!!!']).code, 2);
+    assert.equal(search(c, ['stale', '--fresh']).code, 2);
+  });
+
   it('is deterministic and an empty result exits 0', () => {
     const a = search(cwd, ['search', 'retry']).out;
     assert.equal(a, search(cwd, ['search', 'retry']).out);
@@ -168,6 +184,28 @@ describe('okf-search cache, bad files and exit codes', () => {
     assert.deepEqual(ids(json(cwd, ['search', 'zebra'])), ['cache']);
     fs.rmSync(path.join(cwd, 'okf', 'cache.md'));
     assert.deepEqual(ids(json(cwd, ['search', 'zebra'])), [], 'a deleted file leaves the results');
+  });
+
+  it('does not trust a same-size edit that keeps its mtime, nor cache a read error', () => {
+    const cwd = bundle('racy', FILES);
+    const file = path.join(cwd, 'okf', 'retry.md');
+    assert.deepEqual(ids(json(cwd, ['search', '--stale'])), ['old-retry']);
+    // Push the cache's files well into the past so only ctime can give the edit away.
+    const past = new Date(Date.now() - 3_600_000);
+    for (const f of ['retry.md', 'old-retry.md']) fs.utimesSync(path.join(cwd, 'okf', f), past, past);
+    json(cwd, ['search', 'retry']);
+    const old = path.join(cwd, 'okf', 'old-retry.md');
+    fs.writeFileSync(old, fs.readFileSync(old, 'utf8').replace('2026-01-01', '2027-01-01'));
+    fs.utimesSync(old, past, past); // same size, same mtime
+    assert.deepEqual(ids(json(cwd, ['search', '--stale'])), []);
+
+    if (process.getuid?.() !== 0) {
+      fs.chmodSync(file, 0o000);
+      const r = search(cwd, ['search', 'retry']);
+      assert.match(r.err, /skipped retry\.md/);
+      fs.chmodSync(file, 0o644);
+      assert.ok(ids(json(cwd, ['search', 'retry'])).includes('retry'), 'a read error heals once fixed');
+    }
   });
 
   it('works with --no-cache and writes nothing', () => {

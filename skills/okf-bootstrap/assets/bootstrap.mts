@@ -50,6 +50,7 @@ const TEMPLATES = path.join(HERE, 'templates');
 // Kept equal to package.json's version by the test suite.
 const VERSION = '0.3.0';
 const TOOLS = ['okf-view', 'okf-mermaid', 'okf-search', 'okf-core'] as const;
+const LEGACY_MJS: readonly string[] = ['okf-view', 'okf-mermaid'];
 const WIDGETS_DIR = 'packages/okf-widgets';
 const WIDGETS_PKG = 'okf-widgets';
 
@@ -199,8 +200,10 @@ if (opts.toolsOnly) {
 // they are removed so there is one copy of each tool, and package.json points at the new one.
 for (const tool of TOOLS) {
   copyFile(path.join(HERE, `${tool}.mts`), path.join(target, 'scripts', `${tool}.mts`));
+  // Only the two tools that once shipped as .mjs have a legacy copy; a project's own
+  // scripts/okf-search.mjs is not ours to delete.
   const legacy = path.join(target, 'scripts', `${tool}.mjs`);
-  if (fs.existsSync(legacy)) {
+  if (LEGACY_MJS.includes(tool) && fs.existsSync(legacy)) {
     fs.rmSync(legacy);
     removed.push(shortPath(legacy));
   }

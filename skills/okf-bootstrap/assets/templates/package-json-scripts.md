@@ -42,7 +42,7 @@ project's `.js` files are loaded.
 
 `okf:search` is not a gate; it is how an agent finds concepts without reading every file (`npm run
 okf:search -- search "query" --fresh`; see the playbook's "Finding concepts"). It needs `okf-core.mts`
-beside it in `scripts/`.
+beside it in `scripts/`, as does `okf-view.mts`: copy all four tools, or let the scaffold.
 
 `okf:fix` is not a gate: it rewrites the bundle's markdown so every ` ```mermaid ` `erDiagram`
 has its generated relationship key below it. `okf:validate` fails until it has been run.

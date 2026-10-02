@@ -246,7 +246,7 @@ arithmetic. Add `--json` for agents.
 npm run okf:search -- facets                          # the tags, types, trust tiers in use; start here
 npm run okf:search -- search "retry backoff" --fresh  # ranked; --tag, --type, --status, --trust human,machine
 npm run okf:search -- show parcel-tracker/retry-policy --outline   # headings only
-npm run okf:search -- show parcel-tracker/retry-policy --section "Why"   # one section, not the file
+npm run okf:search -- show parcel-tracker/overview --section "What it does"   # one section, not the file
 npm run okf:search -- related adr/0003-full-jitter-retries   # links, backlinks, shared tags
 npm run okf:search -- stale --expires-within 14d      # the review queue
 ```

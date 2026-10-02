@@ -3,9 +3,10 @@
  * OKF bundle search: ranked, spec-aware retrieval for agents and people.
  *
  * Reads a bundle once (frontmatter, headings, links, term counts), caches that on
- * disk keyed by each file's mtime and size, and answers queries from the cache. No
- * daemon: every run re-stats the files and re-parses only what changed, so the
- * answer is never stale and a deleted cache only costs time.
+ * disk keyed by each file's size, mtime and ctime, and answers queries from the cache.
+ * No daemon: every run re-stats the files and re-parses what changed, and what was
+ * modified close to when the cache was written (the "racily clean" rule version
+ * control tools use), so a deleted cache only costs time. `--no-cache` skips it.
  *
  * Ranking is BM25F over title, tags, path, description, headings and body, then
  * adjusted by what the OKF spec says about a concept: stale (§5.5) and deprecated
@@ -49,6 +50,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   errorMessage,
   extractLinks,
@@ -60,8 +62,17 @@ import {
   trustTier,
 } from './okf-core.mts';
 
-// Bump when the shape of the cache or the tokenizer changes.
-const CACHE_VERSION = 1;
+// The cache is only valid for the code that wrote it: a hash of this file and okf-core.mts,
+// so a refreshed copy of either tool never reads entries a different tokenizer produced.
+const CACHE_VERSION = crypto
+  .createHash('sha1')
+  .update(fs.readFileSync(fileURLToPath(import.meta.url)))
+  .update(fs.readFileSync(fileURLToPath(new URL('./okf-core.mts', import.meta.url))))
+  .digest('hex')
+  .slice(0, 12);
+// A file modified this close to the cache being written may have changed again within the
+// same timestamp tick, so it is re-read rather than trusted.
+const RACY_MS = 2000;
 
 type Field = 'title' | 'tags' | 'path' | 'description' | 'headings' | 'body';
 const FIELDS: Field[] = ['title', 'tags', 'path', 'description', 'headings', 'body'];
@@ -119,12 +130,14 @@ interface Entry {
 interface Cached {
   size: number;
   mtime: number;
+  ctime: number;
   entry?: Entry;
   error?: string; // why the file could not be indexed
 }
 
 interface CacheFile {
-  version: number;
+  version: string;
+  written: number; // ms since the epoch, when this file was written
   files: Record<string, Cached>;
 }
 
@@ -244,7 +257,7 @@ function indexFile(rel: string, bundleRoot: string, text: string): Entry {
     title: texts.title,
     description: texts.description,
     tags,
-    status: String(fm.status ?? 'stable'),
+    status: String(fm.status ?? 'stable').toLowerCase(),
     trust: trustTier(fm),
     stale_after: fm.stale_after == null ? '' : String(fm.stale_after),
     generated_at: String((generated as Record<string, unknown>).at ?? ''),
@@ -258,17 +271,29 @@ function indexFile(rel: string, bundleRoot: string, text: string): Entry {
 
 // --- the cache --------------------------------------------------------------
 
-function cachePath(bundleRoot: string): string {
+/** Where the cache lives, or null when no private place exists (then there is no cache). */
+function cachePath(bundleRoot: string): string | null {
   const key = crypto.createHash('sha1').update(path.resolve(bundleRoot)).digest('hex').slice(0, 12);
   const nm = path.resolve('node_modules');
-  const base = fs.existsSync(nm) ? path.join(nm, '.cache', 'okf-search') : path.join(os.tmpdir(), 'okf-search');
-  return path.join(base, `${key}.json`);
+  if (fs.existsSync(nm)) return path.join(nm, '.cache', 'okf-search', `${key}.json`);
+  // No node_modules here: a per-user directory in the temp dir, which must be ours and private,
+  // because another user must not be able to plant a cache an agent would then trust.
+  const uid = process.getuid?.();
+  const dir = path.join(os.tmpdir(), `okf-search-${uid ?? 'user'}`);
+  try {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    const st = fs.lstatSync(dir);
+    if (!st.isDirectory() || (uid !== undefined && st.uid !== uid) || (st.mode & 0o077) !== 0) return null;
+  } catch {
+    return null;
+  }
+  return path.join(dir, `${key}.json`);
 }
 
 function readCache(file: string): CacheFile | null {
   try {
     const c = JSON.parse(fs.readFileSync(file, 'utf8')) as CacheFile;
-    return c && c.version === CACHE_VERSION && c.files ? c : null;
+    return c && c.version === CACHE_VERSION && typeof c.written === 'number' && c.files ? c : null;
   } catch {
     return null; // missing or corrupt: rebuild
   }
@@ -278,7 +303,8 @@ function writeCache(file: string, cache: CacheFile): void {
   try {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify(cache));
+    fs.rmSync(tmp, { force: true });
+    fs.writeFileSync(tmp, JSON.stringify(cache), { flag: 'wx' }); // never write through a planted link
     fs.renameSync(tmp, file); // atomic, so a concurrent reader never sees half a file
   } catch {
     // The cache is an optimisation. A read-only checkout still searches.
@@ -286,9 +312,9 @@ function writeCache(file: string, cache: CacheFile): void {
 }
 
 function loadIndex(bundleRoot: string, useCache: boolean): Index {
-  const file = cachePath(bundleRoot);
-  const old = useCache ? readCache(file) : null;
-  const next: CacheFile = { version: CACHE_VERSION, files: {} };
+  const file = useCache ? cachePath(bundleRoot) : null;
+  const old = file ? readCache(file) : null;
+  const next: CacheFile = { version: CACHE_VERSION, written: Date.now(), files: {} };
   let changed = old === null;
   const skipped: Skipped[] = [];
   const entries: Entry[] = [];
@@ -305,11 +331,25 @@ function loadIndex(bundleRoot: string, useCache: boolean): Index {
       continue;
     }
     let rec = old?.files[rel];
-    if (!rec || rec.size !== st.size || rec.mtime !== st.mtimeMs) {
+    const trusted =
+      rec &&
+      rec.size === st.size &&
+      rec.mtime === st.mtimeMs &&
+      rec.ctime === st.ctimeMs &&
+      rec.mtime < old!.written - RACY_MS;
+    if (!rec || !trusted) {
       changed = true;
-      rec = { size: st.size, mtime: st.mtimeMs };
+      let text: string;
       try {
-        rec.entry = indexFile(rel, bundleRoot, fs.readFileSync(full, 'utf8'));
+        text = fs.readFileSync(full, 'utf8');
+      } catch (e) {
+        // A read failure may be transient (permissions), so it is reported but never cached.
+        skipped.push({ file: rel, reason: errorMessage(e) });
+        continue;
+      }
+      rec = { size: st.size, mtime: st.mtimeMs, ctime: st.ctimeMs };
+      try {
+        rec.entry = indexFile(rel, bundleRoot, text);
       } catch (e) {
         rec.error = errorMessage(e);
       }
@@ -319,7 +359,7 @@ function loadIndex(bundleRoot: string, useCache: boolean): Index {
     else skipped.push({ file: rel, reason: rec.error ?? 'unreadable' });
   }
   if (old && Object.keys(old.files).length !== Object.keys(next.files).length) changed = true;
-  if (useCache && changed) writeCache(file, next);
+  if (file && changed) writeCache(file, next);
 
   const byId = new Map(entries.map((e) => [e.id, e]));
   const inlinks = new Map<string, string[]>();
@@ -377,7 +417,7 @@ function freshnessLabel(f: Freshness): string {
 
 function matchesFilters(e: Entry, o: Options, idx: Index): boolean {
   if (o.type && e.type.toLowerCase() !== o.type.toLowerCase()) return false;
-  if (o.status && e.status.toLowerCase() !== o.status.toLowerCase()) return false;
+  if (o.status && e.status !== o.status.toLowerCase()) return false;
   if (o.trust && !o.trust.includes(e.trust)) return false;
   if (o.tags.length) {
     const have = new Set(e.tags.map((t) => t.toLowerCase()));
@@ -427,32 +467,49 @@ interface Hit {
   matched: string[];
 }
 
-function expandTerms(idx: Index, terms: string[]): Array<{ term: string; weight: number }> {
-  const out: Array<{ term: string; weight: number }> = [];
-  for (const t of terms) {
-    if (idx.df.has(t)) {
-      out.push({ term: t, weight: 1 });
-    } else if (t.length >= 3) {
-      // Not in the bundle: treat the word as a prefix ("retr" finds "retry"), at a lower weight.
-      for (const v of idx.df.keys()) if (v.startsWith(t)) out.push({ term: v, weight: 0.6 });
-    }
-  }
-  return out;
+/** One query word and the bundle words it stands for. */
+interface QueryTerm {
+  word: string;
+  expansions: Array<{ term: string; weight: number }>;
 }
 
-function bm25f(idx: Index, e: Entry, terms: Array<{ term: string; weight: number }>): number {
+const MAX_PREFIX_EXPANSIONS = 25;
+
+/** Done once per query, not per concept: a word in the bundle is itself; otherwise a prefix. */
+function expandQuery(idx: Index, words: string[]): QueryTerm[] {
+  return words.map((word) => {
+    if (idx.df.has(word)) return { word, expansions: [{ term: word, weight: 1 }] };
+    if (word.length < 3) return { word, expansions: [] };
+    // Not in the bundle: treat it as a prefix ("retr" finds "retry"), at a lower weight, and
+    // keep the commonest few so a short prefix cannot fan out across the vocabulary.
+    const found: string[] = [];
+    for (const v of idx.df.keys()) if (v.startsWith(word)) found.push(v);
+    found.sort((a, b) => idx.df.get(b)! - idx.df.get(a)! || a.localeCompare(b));
+    return { word, expansions: found.slice(0, MAX_PREFIX_EXPANSIONS).map((term) => ({ term, weight: 0.6 })) };
+  });
+}
+
+const present = (e: Entry, term: string) => FIELDS.some((f) => e.tf[f][term]);
+
+/** Each query word scores as its best expansion, so a family of related words cannot outvote the word asked for. */
+function bm25f(idx: Index, e: Entry, query: QueryTerm[]): number {
   const n = idx.entries.length;
   let score = 0;
-  for (const { term, weight } of terms) {
-    const df = idx.df.get(term) ?? 0;
-    const idf = Math.log(1 + (n - df + 0.5) / (df + 0.5));
-    let tfw = 0;
-    for (const f of FIELDS) {
-      const c = e.tf[f][term];
-      if (!c) continue;
-      tfw += (FIELD_WEIGHT[f] * c) / (1 - B + (B * e.len[f]) / idx.avgLen[f]);
+  for (const { expansions } of query) {
+    let best = 0;
+    for (const { term, weight } of expansions) {
+      if (!present(e, term)) continue;
+      const df = idx.df.get(term) ?? 0;
+      const idf = Math.log(1 + (n - df + 0.5) / (df + 0.5));
+      let tfw = 0;
+      for (const f of FIELDS) {
+        const c = e.tf[f][term];
+        if (!c) continue;
+        tfw += (FIELD_WEIGHT[f] * c) / (1 - B + (B * e.len[f]) / idx.avgLen[f]);
+      }
+      best = Math.max(best, weight * idf * (tfw / (K1 + tfw)));
     }
-    score += weight * idf * (tfw / (K1 + tfw));
+    score += best;
   }
   return score;
 }
@@ -464,14 +521,19 @@ function adjustments(e: Entry, o: Options, idx: Index): Hit['adjust'] {
   if (e.status === 'draft') out.push({ why: 'draft', factor: DRAFT_FACTOR });
   const boost = TRUST_BOOST[e.trust] ?? 1;
   if (boost !== 1) out.push({ why: e.trust, factor: boost });
-  const inbound = Math.min(idx.inlinks.get(e.id)?.length ?? 0, INLINK_CAP);
-  if (inbound) out.push({ why: `${inbound} inbound link${inbound === 1 ? '' : 's'}`, factor: 1 + INLINK_STEP * inbound });
+  const inbound = idx.inlinks.get(e.id)?.length ?? 0;
+  if (inbound) {
+    out.push({
+      why: `${inbound} inbound link${inbound === 1 ? '' : 's'}`,
+      factor: 1 + INLINK_STEP * Math.min(inbound, INLINK_CAP),
+    });
+  }
   return out;
 }
 
 function search(idx: Index, o: Options, query: string): Hit[] {
   const terms = [...new Set(tokenize(query))];
-  const expanded = expandTerms(idx, terms);
+  const expanded = expandQuery(idx, terms);
   const hits: Hit[] = [];
   for (const e of idx.entries) {
     if (!matchesFilters(e, o, idx)) continue;
@@ -481,9 +543,9 @@ function search(idx: Index, o: Options, query: string): Hit[] {
       hits.push({ entry: e, score: 0, text: 0, adjust, matched: [] });
       continue;
     }
-    const matched = terms.filter((t) =>
-      expandTerms(idx, [t]).some(({ term }) => FIELDS.some((f) => e.tf[f][term])),
-    );
+    const matched = expanded
+      .filter(({ expansions }) => expansions.some(({ term }) => present(e, term)))
+      .map(({ word }) => word);
     if (matched.length === 0) continue;
     if (o.all && matched.length < terms.length) continue;
     const text = bm25f(idx, e, expanded);
@@ -569,6 +631,9 @@ function cmdSearch(idx: Index, o: Options, bundleRoot: string): void {
   const filtered =
     o.tags.length || o.type || o.status || o.trust || o.freshness || o.expiresWithin !== null || o.linkedFrom || o.linksTo;
   if (!query && !filtered) throw new UsageError('search needs a query or at least one filter');
+  if (query && tokenize(query).length === 0 && !filtered) {
+    throw new UsageError(`"${query}" has no searchable words`);
+  }
   const all = search(idx, o, query);
   const shown = all.slice(0, o.limit);
   const terms = [...new Set(tokenize(query))];
@@ -686,6 +751,7 @@ function cmdFacets(idx: Index, o: Options): void {
 }
 
 function cmdStale(idx: Index, o: Options): void {
+  if (o.freshness) throw new UsageError('stale already lists only stale concepts; drop --fresh/--stale');
   // Overdue first, then (with --expires-within) what is about to be. The window is applied
   // here, not by matchesFilters, which would drop the overdue ones.
   const base: Options = { ...o, freshness: null, expiresWithin: null };
@@ -750,6 +816,10 @@ function parseArgs(argv: string[]): Options {
   const command = rest[0]!;
   if (!['search', 'show', 'related', 'facets', 'tags', 'stale'].includes(command)) {
     throw new UsageError(`unknown command "${command}" (search, show, related, facets, stale)`);
+  }
+  const status = one('status');
+  if (status !== null && !['draft', 'stable', 'deprecated'].includes(status.toLowerCase())) {
+    throw new UsageError(`--status: "${status}" is not draft, stable or deprecated`);
   }
   if (has('fresh') && has('stale')) throw new UsageError('--fresh and --stale contradict each other');
   const limit = one('limit') === null ? 10 : Number(one('limit'));

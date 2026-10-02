@@ -18,7 +18,7 @@ compatibility: Node 24+ (runs TypeScript directly). npm. Chromium via playwright
 Scaffolds the **app-knowledge** flavour of an [OKF](references/okf-spec/SPEC.md) doc pack into
 a project and keeps it honest: an `okf/` bundle (index, dated log, ADR area, `design/` and
 `<slug>/` concept dirs), the `okf-view.mts` validator + graph viewer, the `okf-mermaid.mts`
-parse checker, the `okf:` npm scripts, and optionally `packages/okf-widgets` for interactive
+parse checker, the `okf-search.mts` freshness-aware search, the `okf:` npm scripts, and optionally `packages/okf-widgets` for interactive
 explainers. It models knowledge *about* a project: decisions, architecture, domain model, API,
 and the guided tours that make them understandable.
 
@@ -54,7 +54,7 @@ node <skill dir>/assets/bootstrap.mts <targetDir> --name "Project Name" [--widge
 | `--force` | Replace the authored files (index, log, ADR index and template, authoring templates) with fresh templates. Never touches `packages/okf-widgets` |
 
 A plain re-run keeps every authored file and lists what it kept, so re-running to pick up newer
-tooling never costs `log.md`'s history. The two `scripts/` tools are generated copies: always
+tooling never costs `log.md`'s history. The `scripts/okf-*.mts` tools are generated copies: always
 refreshed, and older `.mjs` copies are removed.
 
 ## Procedure
@@ -92,6 +92,15 @@ refreshed, and older `.mjs` copies are removed.
    look, in light and dark: the gates prove it works, not that it reads well.
 5. **Commit** `okf/`, `scripts/`, `packages/okf-widgets/`, the two authoring templates and
    `package.json`. Gitignore `okf/viz.html` (generated).
+
+## Finding things in a bundle
+
+Do not read a whole bundle to answer a question. `npm run okf:search -- <command>` ranks
+concepts by text and by what the spec says about them (trust tier, stale, deprecated, links):
+`facets` (the tags and types in use), `search "query" [--fresh --tag t --trust human]`,
+`show <id> --outline` then `--section <heading>`, `related <id>`, `stale`. Add `--json`. The
+viewer's search box runs the same ranking. Treat a
+`stale` or `unverified` hit as a lead to check, not a fact. Details: the playbook's "Finding concepts".
 
 ## Writing rules (short version)
 

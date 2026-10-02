@@ -11,6 +11,9 @@
  *   okf/adr/template.md       : ADR template (type: Reference)
  *   scripts/okf-view.mts      : validator + viewer + render gate (copied verbatim)
  *   scripts/okf-mermaid.mts   : mermaid parse checker via mmdc (copied verbatim)
+ *   scripts/okf-search.mts    : ranked, freshness-aware search for agents (copied verbatim)
+ *   scripts/okf-core.mts      : parsing shared by the view and search tools (copied verbatim)
+ *   scripts/okf-rank.mts      : the ranking, shared by search and the viewer's search box (copied verbatim)
  *   okf-concept-template.md   : authoring aid for a reference concept (outside the bundle)
  *   okf-explainer-template.md : authoring aid for a guided tour: callouts, widgets, a quiz
  *   packages/okf-widgets/     : with --widgets, the React micro-world package (a workspace)
@@ -20,7 +23,7 @@
  * Re-running is safe: authored files (index.md, log.md, the ADR index and template, the two
  * authoring templates) are kept if they already exist, and only --force replaces them.
  * packages/okf-widgets is the project's own code once scaffolded, so it is never replaced,
- * not even by --force. The two tools under scripts/ are generated, so they are always
+ * not even by --force. The tools under scripts/ are generated, so they are always
  * refreshed, and older .mjs copies of them are removed.
  *
  * Usage:
@@ -47,7 +50,8 @@ const TEMPLATES = path.join(HERE, 'templates');
 // The producer stamped into scaffolded frontmatter (OKF actor convention: <producer>/<version>).
 // Kept equal to package.json's version by the test suite.
 const VERSION = '0.3.0';
-const TOOLS = ['okf-view', 'okf-mermaid'] as const;
+const TOOLS = ['okf-view', 'okf-mermaid', 'okf-search', 'okf-core', 'okf-rank'] as const;
+const LEGACY_MJS: readonly string[] = ['okf-view', 'okf-mermaid'];
 const WIDGETS_DIR = 'packages/okf-widgets';
 const WIDGETS_PKG = 'okf-widgets';
 
@@ -192,13 +196,15 @@ if (opts.toolsOnly) {
 }
 
 // --- tooling ----------------------------------------------------------------
-// The two scripts are generated copies, so they are always refreshed; that is the point of
+// The scripts are generated copies, so they are always refreshed; that is the point of
 // --tools-only. A project bootstrapped before the tools became TypeScript has .mjs copies;
 // they are removed so there is one copy of each tool, and package.json points at the new one.
 for (const tool of TOOLS) {
   copyFile(path.join(HERE, `${tool}.mts`), path.join(target, 'scripts', `${tool}.mts`));
+  // Only the two tools that once shipped as .mjs have a legacy copy; a project's own
+  // scripts/okf-search.mjs is not ours to delete.
   const legacy = path.join(target, 'scripts', `${tool}.mjs`);
-  if (fs.existsSync(legacy)) {
+  if (LEGACY_MJS.includes(tool) && fs.existsSync(legacy)) {
     fs.rmSync(legacy);
     removed.push(shortPath(legacy));
   }
@@ -237,6 +243,7 @@ if (opts.scripts) {
       pkg.scripts['okf:fix'] = 'node scripts/okf-view.mts okf --validate --fix';
       pkg.scripts['okf:view'] = build + 'node scripts/okf-view.mts okf';
       pkg.scripts['okf:mermaid'] = 'node scripts/okf-mermaid.mts okf';
+      pkg.scripts['okf:search'] = 'node scripts/okf-search.mts';
       pkg.scripts['okf:mermaid:render'] = build + 'node scripts/okf-view.mts okf --check-render';
       if (hasWidgets) {
         pkg.scripts['okf:widgets:build'] = `npm run build -w ${WIDGETS_PKG}`;
@@ -284,6 +291,9 @@ console.log('\nBootstrapped OKF bundle + tooling in: ' + target);
 if (!opts.toolsOnly) console.log(`  okf/${slug}/, okf/design/   (fill with your first concepts)`);
 console.log('  scripts/okf-view.mts       (validator + viewer + --check-render)  refreshed');
 console.log('  scripts/okf-mermaid.mts    (mermaid parse check via mmdc)         refreshed');
+console.log('  scripts/okf-search.mts     (ranked, freshness-aware search)       refreshed');
+console.log('  scripts/okf-core.mts       (parsing shared by view and search)    refreshed');
+console.log('  scripts/okf-rank.mts       (the ranking, also run in the viewer)  refreshed');
 if (created.length) {
   console.log('\nCreated:');
   for (const f of created) console.log('  ' + f);
@@ -305,6 +315,7 @@ console.log('  npm run okf:fix             # write the relationship key under ev
 console.log('  npm run okf:view            # validate + write okf/viz.html');
 console.log('  npm run okf:mermaid         # every mermaid block parses (needs mmdc)');
 console.log('  npm run okf:mermaid:render  # every diagram, quiz and widget works in the viewer');
+console.log('  npm run okf:search -- search "query"   # find concepts before reading them');
 if (hasWidgets) {
   console.log('  npm run okf:widgets:typecheck && npm run okf:widgets:test');
 }

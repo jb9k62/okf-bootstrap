@@ -6,27 +6,48 @@ tags: [explainer, guided-tour, distributed-systems, hashing]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
 ---
 
-This tour is for anyone spreading data across several servers. If Parcel tracker ever shards
-its [parcels](/parcel-tracker/data-model.md) or its status cache across machines, each key must
-map to one of them, and adding a machine must not make every key move. It does not shard today;
-this tour is for deciding how. There is a widget in the middle and a [quiz](#quiz) at the end.
+This tour is for anyone spreading data across several servers. After it, you will know how to
+add a server without moving almost every key. Parcel tracker does not split its
+[parcels](/parcel-tracker/data-model.md) across servers today; this tour helps decide how. A
+[quiz](#quiz) closes it.
+
+## Who is affected
+
+| Person | What placement means to them |
+| --- | --- |
+| **Amira**, a customer | Her page is fast if her key is on the server asked, slow if not |
+| **Sam**, on call | Adds a cache server before a busy day, and must not make the day worse |
+| **The database** | Not a person, but it answers every cache miss, and falls over first |
 
 ## Background
 
-The simplest placement is `hash(key) % servers`. It balances well and is stateless, and it has
-one large flaw: the number of servers is in the formula.
+The simplest way to pick a server is `hash(key) % servers`: hash the key to a number, and
+take the remainder. It spreads keys evenly. Its flaw: the number of servers is in the formula.
 
 > [!definition] Consistent hashing
-> Hash both servers and keys onto the same circle. A key belongs to the first server found
-> going clockwise from it. Adding a server only takes over the arc just before it.
+> Place servers and keys on the same circle, by hash. A key belongs to the next server
+> clockwise. A new server only takes over the stretch just before it.
 
 > [!definition] Virtual node
-> One server placed at many points on the circle. Its share is the total of many small arcs,
-> which averages out to its fair share.
+> One server placed at many points on the circle. Many small stretches add up to about a fair
+> share.
 
-## Intuition
+## The problem, one step at a time
 
-With modulo, a changed divisor changes nearly every remainder.
+Say the status cache runs on five servers, using `hash(key) % 5`.
+
+1. **Amira opens her parcel.** Her key's remainder picks a server, and she gets a hit.
+2. **Sam adds a sixth server.** The formula becomes `hash(key) % 6`.
+3. **Amira refreshes.** Same hash, but a new remainder, so a different server. It has never
+   seen her key: a miss.
+4. **Almost every key has moved.** The cache is in effect empty, and the database takes the
+   whole load just as *Sam* meant to add room.
+5. **On a ring, only the new server's stretch moves.** On average, one key in six. *Amira* misses
+   only if hers is one of them.
+
+## The picture
+
+With modulo, a new divisor changes nearly every remainder.
 
 ```mermaid
 flowchart LR
@@ -42,30 +63,37 @@ flowchart LR
     class B good
 ```
 
-Try it. Start with **One point per server** and look at the bars. Click **128 virtual nodes
-each**. Then click **Twenty servers** and read the two "keys moved" lines.
+Try it, in three steps. The circle is coloured by server. The bars show how many keys each
+server holds.
+
+1. **One point each.** Open on **One point per server**. The busiest server holds about 2.3
+   times the average. Read the "keys moved" lines: about 5% on the ring, about 90% with
+   `hash % servers`.
+2. **Evening it out.** Click **128 virtual nodes each**. The busiest server drops to about 1.2
+   times the average.
+3. **A bigger cluster.** Click **Twenty servers**. Adding one more moves about 4% of keys on
+   the ring, and about 95% with modulo.
 
 ```widget
 consistent-hash
 ```
 
 > [!tip] What to notice
-> The two "keys moved" lines are the point. In a cache, every moved key is a miss, so
-> `hash % servers` turns adding one server into emptying the cache.
+> In a cache, every moved key is a miss. So with `hash % servers`, adding one server nearly
+> empties the cache.
 
 ## Details
 
 > [!important] The rule
-> Placement should depend on the keys and the servers that exist, not on how many servers
-> there are.
+> A key's server should depend on which servers exist, not on how many there are.
 
 > [!warning] One point per server is uneven
-> Points on a circle fall unevenly, so a server can own several times its share. Virtual nodes
-> fix the average, at the price of a larger ring to hold and search.
+> Points fall unevenly on a circle, so one server can own several times its share. Virtual
+> nodes even this out, at the cost of a bigger ring to store and search.
 
 > [!edge-case] Removing a server
-> The keys it held move to the next servers clockwise, which can overload one neighbour. Many
-> virtual nodes spread them across many neighbours instead.
+> Its keys move to the next server clockwise, which can overload that one neighbour. With many
+> virtual nodes, they spread over many neighbours.
 
 ## Quiz
 
@@ -74,25 +102,25 @@ Three questions on the ideas above.
 ```quiz
 A cache cluster uses hash(key) % 5 and a sixth server is added. What happens to the cached entries?
 - [ ] About a sixth of them are now on a different server
-~ That is the ring's behaviour, not modulo's.
+~ That is how a ring behaves, not modulo.
 - [x] Most of them are now on a different server, so most lookups miss
-~ The remainder changes for almost every key when the divisor changes.
+~ When the divisor changes, almost every remainder changes.
 - [ ] None, the hash is stable
 ~ The hash is stable; the remainder is not.
 ---
 Why do consistent hashing implementations give each server many points on the ring?
 - [ ] To make lookups faster
-~ More points make the ring larger and the search slightly slower.
+~ More points make the ring bigger and the search slightly slower.
 - [x] To even out how much of the ring each server owns
-~ One point per server leaves some servers with much bigger arcs than others.
+~ With one point each, some servers get much bigger stretches than others.
 - [ ] To make keys move more often
 ~ The aim is the opposite: fewer moves, spread evenly.
 ---
 A server joins a hash ring. Which keys can move?
 - [ ] Any key, as with modulo hashing
-~ That is the modulo behaviour the ring is designed to avoid.
+~ That is what the ring is designed to avoid.
 - [x] Only keys the new server now owns: none move between existing servers
 ~ The test suite checks this: a moved key always lands on the newcomer.
 - [ ] Only the keys with the largest hash values
-~ Position on the ring, not size, decides, and only the new arcs change owner.
+~ Position on the ring decides, and only the new server's stretches change owner.
 ```

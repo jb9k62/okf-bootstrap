@@ -20,6 +20,14 @@ One paragraph: who this is for, what they will be able to do or explain afterwar
 to read it (top to bottom, or jump to [the part most people come for](#details)). Mention the
 interactive widgets and the [quiz](#quiz) so the reader knows they are there.
 
+## Who is affected
+
+Who the problem touches, one short line each. Name the cast once for the bundle and reuse it.
+
+| Person | What they experience |
+| --- | --- |
+| **<Name>**, <role> | <One short line: what goes wrong or right for them> |
+
 ## Background
 
 What the reader needs before the change or the mechanism makes sense: the existing system,
@@ -29,6 +37,13 @@ the problem, the words. Define terms once, with a callout, then use them consist
 > <One or two sentences. Say what it is, and what it is not if the two are easily confused.>
 
 Link to the reference concepts ([Overview](/<slug>/overview.md)) rather than restating them.
+
+## The problem, one step at a time
+
+One incident in three to five numbered steps: one event per step, and whose view it is.
+
+1. **<What happens, in one short sentence.>** <What *<Name>* sees.>
+2. **<What happens next.>** <What *<Name>* sees.>
 
 ## Intuition
 
@@ -45,7 +60,8 @@ flowchart LR
     class A,B,C,D step
 ```
 
-Say what to try before the widget, and what to notice. A widget without a prompt is a toy.
+Before the widget, number the steps ("Try it, in three steps"): one or two sentences each,
+naming the preset to click and what to read. A widget without a prompt is a toy.
 
 ```widget
 <widget-name>

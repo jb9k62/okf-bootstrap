@@ -49,6 +49,23 @@ factual; the explainer links to them and adds the path through them.
    `[!warning]` or `[!caution]`, edge cases as `[!edge-case]`.
 5. **Quiz**: the check, last.
 
+**Perspectives and pace.** "The system does X" leaves the reader asking why it matters, and
+to whom. Give the bundle a small cast of named roles (a customer, the on-call engineer, the
+other side of an integration), defined once and reused, so a name means the same role in
+every tour. Then add two parts to the shape above:
+
+- **Who is affected**, after the opening: one short line per person, saying what they
+  experience. It tells the reader whose problem this is before any vocabulary.
+- **The problem, one step at a time**, before the widget: one incident in three to five
+  numbered steps, one event each, naming whose view it is. Define any term it needs in
+  Background first.
+
+Number the widget instructions too ("Try it, in four steps"): a preset to click and what to
+read. Quote the numbers the reader will see, and check them against the model.
+
+Keep it simple, not simplistic: short sentences, everyday words, each technical term defined
+once. Cut padding, never an idea.
+
 Keep an explainer to one idea's worth of material. Two ideas make two tours that link to each
 other (and both belong in `index.md`).
 

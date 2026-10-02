@@ -12,6 +12,12 @@
   ends, light and dark). The widget keeps a key under its diagram (only the ends that schema
   uses, in the same words) and its line tooltips give the same sentence. Re-run `npm run
   okf:fix` to refresh existing keys.
+- **Clearer demo tours**: all nine Parcel tracker tours now name who is affected (a customer,
+  the on-call engineer, the courier's engineer, an analyst, a front-end developer), tell the
+  problem one step at a time from their seats, and number the widget instructions with a
+  preset to click and the figure to read at each, all in short, plain sentences. The cast lives
+  in the overview. The
+  explainer guide and template describe the pattern.
 - **Better on phones**: the viewer's top bar is now a search box and one swipeable row of
   controls (it used to fill half the screen), the graph is shorter and its colour key is a single
   line. Widgets get touch-sized controls, full-width sliders and two-column short lists on narrow

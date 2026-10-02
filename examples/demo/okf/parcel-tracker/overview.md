@@ -24,6 +24,18 @@ for new events, stores them, and notifies the customer when the status changes.
 - Publishes a [weekly delivery report](/parcel-tracker/weekly-report.md) of on-time rates per
   carrier.
 
+## Who is involved
+
+The tours follow the same people, so the same name means the same role everywhere.
+
+| Person | Role | What they care about |
+| --- | --- | --- |
+| **Amira** | A customer waiting for a parcel | The page shows the right status, quickly, and is never blank or wrong |
+| **Sam** | The on-call engineer who runs the poller | Carrier trouble does not become our trouble; the pager stays quiet |
+| **Dana** | An integrations engineer at a courier company, whose API we poll | Our traffic does not knock their service over |
+| **Noor** | A front-end developer on the customer app | The page looks and behaves as designed, and the CSS is something the next person can change |
+| **Lee** | An operations analyst who reads the weekly report | The numbers mean what the label says, and match what the carrier reports |
+
 ## What it leaves out
 
 - No booking or labels: it only tracks parcels that already exist.

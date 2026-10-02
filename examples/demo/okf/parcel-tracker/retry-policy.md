@@ -13,7 +13,7 @@ verified:
 
 | Setting | Value | Why |
 | --- | --- | --- |
-| Retries | 5 | Enough to ride out a restart, few enough to give up in about half a minute |
+| Retries | 5 | Enough to ride out a restart, few enough to give up in under ten seconds (0.5 + 1 + 2 + 2 + 2 s, once the cap applies) |
 | Base delay | 500 ms | The first wait; each later one doubles |
 | Jitter | full | Spreads clients out, so a recovering server does not meet them all at once |
 | Cap | 2 s per wait | Bounds how long a client can go quiet |

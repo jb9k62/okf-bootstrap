@@ -150,10 +150,54 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.click('[data-view=table]');
     assert.equal(await page.locator('#concept-table tbody tr').count(), 1);
     await page.selectOption('#filter-type', '');
-    await page.fill('#search', 'no-such-concept-xyz');
+    await page.fill('#search', 'zzqqxxnomatch');
     assert.equal(await page.locator('#concept-table tbody tr').count(), 0);
     assert.equal(await page.locator('#table-empty').isVisible(), true);
     await page.fill('#search', '');
+    await page.click('[data-view=graph]');
+  });
+
+  view('ranked search lists results with trust and freshness, and Enter opens the first', async () => {
+    await page.click('#reset');
+    await page.focus('#search');
+    await page.keyboard.type('retry jitter');
+    await page.waitForSelector('#search-results:not([hidden]) .sr-item');
+    const rows = await page.$$eval('#search-results .sr-item', (r) => r.map((x) => x.textContent ?? ''));
+    assert.ok(rows.length >= 2, 'several results');
+    assert.match(rows[0]!, /human reviewed|human-reviewed/, 'a human-reviewed concept leads');
+    assert.match(rows[0]!, /fresh, \d+d left/);
+    assert.match((await page.textContent('#search-results .sr-head')) ?? '', /best first/);
+    // Non-matches dim in the graph.
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => location.hash.includes('retry-policy'));
+    assert.equal(await page.isHidden('#search-results'), true, 'the list closes once a result is chosen');
+    await page.click('#reset');
+  });
+
+  view('the search mode, trust and freshness controls change what matches', async () => {
+    await page.click('[data-view=table]');
+    const rowCount = () => page.locator('#concept-table tbody tr').count();
+    const all = await rowCount();
+    // Ranked: the table follows the ranking and shows a Match column.
+    await page.fill('#search', 'retries');
+    const ranked = await rowCount();
+    assert.ok(ranked > 0 && ranked < all);
+    assert.equal(await page.locator('#concept-table th:last-child').isVisible(), true);
+    // Contains: a plain match on title, path or tag, with no Match column.
+    await page.selectOption('#search-mode', 'contains');
+    assert.equal(await page.locator('#concept-table th:last-child').isHidden(), true);
+    assert.ok((await rowCount()) > 0);
+    await page.selectOption('#search-mode', 'ranked');
+    // Trust and freshness narrow ranked results.
+    await page.selectOption('#filter-trust', 'human-reviewed');
+    const human = await rowCount();
+    assert.ok(human > 0 && human < ranked, `human-reviewed ${human} of ${ranked}`);
+    await page.selectOption('#filter-trust', '');
+    await page.fill('#search', '');
+    await page.selectOption('#filter-fresh', 'stale');
+    assert.equal(await rowCount(), 1, 'the demo has one stale concept');
+    await page.click('#reset');
+    assert.equal(await rowCount(), all);
     await page.click('[data-view=graph]');
   });
 
@@ -233,6 +277,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
     assert.ok(before.length < ids.length);
 
     await page.fill('#search', 'zzzz');
+    await page.keyboard.press('Escape'); // close the results list, which can sit over Reset
     await page.click('#reset');
     assert.equal(await page.inputValue('#search'), '');
     assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'true');

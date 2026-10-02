@@ -1,12 +1,13 @@
 /**
  * Shared OKF reading code: frontmatter parsing, trust tier (SPEC §5.3), staleness
  * (§5.5), link extraction (§6.1) and bundle walking. Used by okf-view.mts and
- * okf-search.mts, which are copied into projects beside this file as
+ * okf-search.mts (with okf-rank.mts, the ranking), which are copied into projects beside this file as
  * scripts/okf-*.mts. Imports nothing from outside this directory.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import YAML from 'yaml';
+import { stripCode } from './okf-rank.mts';
 
 export type Frontmatter = Record<string, unknown>;
 export type Evidence = Record<string, unknown>;
@@ -76,38 +77,6 @@ export function isStale(fm: Frontmatter, today: Date): boolean {
 }
 
 // --- link extraction (mirrors reference viewer _extract_links) --------------
-
-/**
- * Blank out fenced blocks and inline code spans. Markdown inside them is shown
- * verbatim rather than rendered, so a link written there is not a link: it must
- * not become a graph edge, and must not be reported as a dangling one either.
- * Best effort, and deliberately line-based: an unbalanced backtick leaves its
- * line alone rather than swallowing the rest of the document.
- */
-export function stripCode(body: string): string {
-  const lines = body.split(/\r?\n/);
-  const out: string[] = [];
-  let fence: { char: string; len: number } | null = null;
-  for (const line of lines) {
-    const m = line.match(/^(\s*)(`{3,}|~{3,})(.*)$/);
-    if (fence) {
-      if (
-        m &&
-        m[2]![0] === fence.char &&
-        m[2]!.length >= fence.len &&
-        m[3]!.trim() === ''
-      )
-        fence = null;
-      out.push('');
-    } else if (m) {
-      fence = { char: m[2]![0]!, len: m[2]!.length };
-      out.push('');
-    } else {
-      out.push(line.replace(/(`+)(.*?)\1/g, ' '));
-    }
-  }
-  return out.join('\n');
-}
 
 export function extractLinks(body: string, docDir: string, bundleRoot: string): string[] {
   const out = new Set<string>();

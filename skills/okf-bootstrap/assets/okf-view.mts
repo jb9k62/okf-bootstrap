@@ -33,6 +33,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { stripTypeScriptTypes } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   errorMessage,
@@ -111,6 +112,16 @@ const OKF_VERSION = '0.2';
 const DEFAULT_WIDGETS_BUNDLE = fileURLToPath(
   new URL('../packages/okf-widgets/dist/okf-widgets.js', import.meta.url),
 );
+
+// The viewer's search box runs the same ranking as `okf-search` (okf-rank.mts). That file is pure
+// TypeScript with no imports, so Node strips its types and it goes into the page as plain script.
+function rankScript(): string {
+  const source = fs.readFileSync(new URL('./okf-rank.mts', import.meta.url), 'utf8');
+  const js = stripTypeScriptTypes(source).replace(/^export /gm, '');
+  const api = 'buildEntry, buildIndex, search, snippet, freshness, freshnessLabel, matchesFilters, NO_FILTERS';
+  // A "</script" inside the code would end the inline block early.
+  return `window.OKF_RANK = (() => {\n${js}\nreturn { ${api} };\n})();`.replace(/<\/script/gi, '<\\/script');
+}
 
 function readWidgetsBundle(file: string): string | null {
   try {
@@ -608,9 +619,25 @@ ${CSS}
     <span>OKF bundle</span>
   </div>
   <div class="controls">
-    <input id="search" type="search" placeholder="Filter by title, path or tag" aria-label="Filter the graph">
+    <input id="search" type="search" placeholder="Search concepts" aria-label="Search concepts" role="combobox" aria-expanded="false" aria-controls="search-results" autocomplete="off">
     <div class="chips">
+    <select id="search-mode" aria-label="Search mode" title="Ranked: relevance, with stale and unverified concepts ranked lower. Contains: a plain match on title, path or tag.">
+      <option value="ranked">Search: ranked</option>
+      <option value="contains">Search: contains</option>
+    </select>
     <select id="filter-type" aria-label="Filter by type"><option value="">All types</option></select>
+    <select id="filter-trust" aria-label="Filter by trust">
+      <option value="">Any trust</option>
+      <option value="human-reviewed">Human reviewed</option>
+      <option value="machine-confirmed">Machine confirmed</option>
+      <option value="unverified">Unverified</option>
+    </select>
+    <select id="filter-fresh" aria-label="Filter by freshness">
+      <option value="">Any freshness</option>
+      <option value="fresh">Not stale</option>
+      <option value="soon">Stale within 30 days</option>
+      <option value="stale">Stale</option>
+    </select>
     <div id="view-switch" class="segmented" role="group" aria-label="View">
       <button type="button" data-view="graph" aria-pressed="true">Graph</button>
       <button type="button" data-view="tree" aria-pressed="false">Tree</button>
@@ -635,6 +662,7 @@ ${CSS}
     </div>
   </div>
 </header>
+<div id="search-results" role="listbox" aria-label="Ranked results" hidden></div>
 
 <main>
   <section id="graph-pane" aria-label="Concept graph">
@@ -681,6 +709,9 @@ ${CSS}
 
 <script>
 ${widgetsJs ?? '/* The widget bundle is not built: npm run okf:widgets:build */'}
+</script>
+<script>
+${rankScript()}
 </script>
 <script>
 window.BUNDLE_NAME = ${scriptJson(title)};
@@ -783,6 +814,37 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .controls { display: flex; flex-wrap: wrap; gap: 8px; }
 .controls input { width: 210px; }
 .chips { display: contents; }
+#search-results {
+  position: fixed;
+  z-index: 40;
+  max-height: min(60vh, 520px);
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.22);
+}
+#search-results[hidden] { display: none; }
+.sr-head { padding: 8px 12px; font-size: 12px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+.sr-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+}
+.sr-item:last-child { border-bottom: 0; }
+.sr-item:hover, .sr-item[aria-selected="true"] { background: var(--surface-2); }
+.sr-title { font-weight: 600; color: var(--heading); }
+.sr-score { float: right; font-size: 12px; font-variant-numeric: tabular-nums; color: var(--text-muted); }
+.sr-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.sr-pill { font-size: 11px; line-height: 1; padding: 3px 6px; border: 1px solid currentColor; border-radius: 999px; }
+.sr-snippet { margin-top: 4px; font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sr-empty { padding: 12px; color: var(--text-muted); font-size: 14px; }
 
 /* Layout: graph on the left, reading pane on the right */
 main { flex: 1; min-height: 0; display: flex; }
@@ -2200,22 +2262,204 @@ const JS = `
     return event.at ? event.by + ", " + String(event.at).slice(0, 10) : String(event.by);
   }
 
-  // Search text and type filter combine: a node must pass both to stay bright.
+  // --- Search -----------------------------------------------------------------
+  // "Ranked" runs the ranking okf-search uses (window.OKF_RANK, the same file): BM25F over title,
+  // tags, path, description, headings and body, with stale, deprecated and unverified concepts
+  // ranked lower and flagged, never hidden. "Contains" is the plain match on title, path and tag.
+  // The type, trust and freshness selects narrow either mode.
+  const Rank = window.OKF_RANK;
+  const latestAt = (list) => {
+    let best = "";
+    let bestTime = -Infinity;
+    for (const v of list || []) {
+      const t = Date.parse(String(v.at));
+      if (!Number.isNaN(t) && t > bestTime) { bestTime = t; best = String(v.at); }
+    }
+    return best;
+  };
+  const metaById = {};
+  for (const node of bundle.nodes) {
+    const d = node.data;
+    metaById[d.id] = {
+      id: d.id,
+      type: d.type,
+      title: d.label,
+      description: d.description || "",
+      tags: d.tags,
+      status: String(d.status || "stable").toLowerCase(),
+      trust: d.trust_tier,
+      stale_after: d.stale_after || "",
+      generated_at: String((d.generated || {}).at || ""),
+      verified_at: latestAt(d.verified),
+      links_to: outLinks[d.id] || [],
+    };
+  }
+  let rankIndex = null;
+  // Counting every concept's words costs a moment, so it waits for the first ranked query.
+  function getRankIndex() {
+    if (!rankIndex) {
+      rankIndex = Rank.buildIndex(bundle.nodes.map((node) => Rank.buildEntry(metaById[node.data.id], bundle.bodies[node.data.id] || "")));
+    }
+    return rankIndex;
+  }
+
+  let filtersNow = Rank.NO_FILTERS;
+  let searchedAt = new Date();
+  let ranking = [];
+  let rankedIds = null;
+  let userSorted = false;
+
+  function readFilters() {
+    const trust = $("filter-trust").value;
+    const fresh = $("filter-fresh").value;
+    return Object.assign({}, Rank.NO_FILTERS, {
+      type: $("filter-type").value || null,
+      trust: trust ? [trust] : null,
+      freshness: fresh === "fresh" || fresh === "stale" ? fresh : null,
+      expiresWithin: fresh === "soon" ? SOON_MS : null,
+    });
+  }
+
+  function runSearch() {
+    searchedAt = new Date();
+    filtersNow = readFilters();
+    const query = $("search").value.trim();
+    if ($("search-mode").value === "ranked" && query) {
+      ranking = Rank.search(getRankIndex(), filtersNow, searchedAt, query);
+      rankedIds = new Set(ranking.map((hit) => hit.entry.id));
+    } else {
+      ranking = [];
+      rankedIds = null;
+    }
+  }
+
   function passesFilters(d) {
+    if (!Rank.matchesFilters(metaById[d.id], filtersNow, searchedAt)) return false;
+    if (rankedIds) return rankedIds.has(d.id);
     const query = $("search").value.trim().toLowerCase();
-    const type = $("filter-type").value;
-    const text = (d.label + " " + d.id + " " + d.tags.join(" ")).toLowerCase();
-    return (query === "" || text.includes(query)) && (type === "" || d.type === type);
+    if (query === "" || $("search-mode").value === "ranked") return true;
+    return (d.label + " " + d.id + " " + d.tags.join(" ")).toLowerCase().includes(query);
+  }
+
+  const PILL_COLOURS = { "human-reviewed": "#16a34a", "machine-confirmed": "#2563eb", unverified: "#d97706", stale: "#dc2626", fresh: "#16a34a", "no-expiry": "#94a3b8" };
+  let activeResult = -1;
+
+  function pill(text, colour) {
+    const el = document.createElement("span");
+    el.className = "sr-pill";
+    el.style.color = colour;
+    el.textContent = text;
+    return el;
+  }
+
+  function placeResults() {
+    const box = $("search").getBoundingClientRect();
+    const panel = $("search-results");
+    const width = Math.min(Math.max(box.width, 380), window.innerWidth - 16);
+    panel.style.top = box.bottom + 4 + "px";
+    panel.style.width = width + "px";
+    panel.style.left = Math.max(8, Math.min(box.left, window.innerWidth - width - 8)) + "px";
+  }
+
+  function hideResults() {
+    $("search-results").hidden = true;
+    $("search").setAttribute("aria-expanded", "false");
+    activeResult = -1;
+  }
+
+  function setActiveResult(index) {
+    const rows = $("search-results").querySelectorAll(".sr-item");
+    if (rows.length === 0) return;
+    activeResult = (index + rows.length) % rows.length;
+    rows.forEach((row, i) => row.setAttribute("aria-selected", String(i === activeResult)));
+    rows[activeResult].scrollIntoView({ block: "nearest" });
+  }
+
+  function renderResults() {
+    const panel = $("search-results");
+    const query = $("search").value.trim();
+    if (!rankedIds || document.activeElement !== $("search") || !query) { hideResults(); return; }
+    const shown = ranking.slice(0, 8);
+    const head = document.createElement("div");
+    head.className = "sr-head";
+    head.textContent = ranking.length === 0
+      ? "No concepts match"
+      : ranking.length + " match" + (ranking.length === 1 ? "" : "es") + (ranking.length > shown.length ? ", top " + shown.length : "")
+        + " · best first; stale ranks lower";
+    const rows = shown.map((hit) => {
+      const e = hit.entry;
+      const row = document.createElement("button");
+      row.type = "button";
+      row.className = "sr-item";
+      row.setAttribute("role", "option");
+      row.setAttribute("aria-selected", "false");
+      row.title = "text " + hit.text.toFixed(2) + hit.adjust.map((a) => " × " + a.factor.toFixed(2) + " (" + a.why + ")").join("");
+      const score = document.createElement("span");
+      score.className = "sr-score";
+      score.textContent = hit.score.toFixed(2);
+      const title = document.createElement("span");
+      title.className = "sr-title";
+      title.textContent = e.title;
+      const meta = document.createElement("div");
+      meta.className = "sr-meta";
+      const fresh = Rank.freshness(e, searchedAt);
+      meta.append(
+        pill(e.type, "var(--text-muted)"),
+        pill(e.trust, PILL_COLOURS[e.trust]),
+        pill(Rank.freshnessLabel(fresh), PILL_COLOURS[fresh.state]),
+      );
+      if (e.status !== "stable") meta.append(pill(e.status, "#d97706"));
+      row.append(score, title, meta);
+      const text = Rank.snippet(bundle.bodies[e.id] || "", query, e.title);
+      if (text) {
+        const line = document.createElement("div");
+        line.className = "sr-snippet";
+        line.textContent = text;
+        row.append(line);
+      }
+      row.addEventListener("mousedown", (event) => event.preventDefault());
+      row.addEventListener("click", () => { hideResults(); open(e.id); });
+      return row;
+    });
+    panel.replaceChildren(head, ...rows);
+    panel.hidden = false;
+    $("search").setAttribute("aria-expanded", "true");
+    placeResults();
+    activeResult = -1;
   }
 
   function applyFilters() {
+    runSearch();
+    // Ranked results arrive best-first, so the table follows them until the reader sorts it.
+    if (rankedIds && !userSorted) sort = { key: "match", dir: -1 };
+    else if (!rankedIds && sort.key === "match") sort = { key: "title", dir: 1 };
     cy.nodes().forEach((node) => node.toggleClass("dim", !passesFilters(node.data())));
     cy.edges().forEach((edge) => {
       edge.toggleClass("dim", edge.source().hasClass("dim") || edge.target().hasClass("dim"));
     });
     refreshLists();
+    renderResults();
   }
   $("search").addEventListener("input", applyFilters);
+  $("search").addEventListener("focus", renderResults);
+  $("search").addEventListener("blur", hideResults);
+  $("search").addEventListener("keydown", (event) => {
+    const open_ = !$("search-results").hidden;
+    if (event.key === "ArrowDown" && open_) { event.preventDefault(); setActiveResult(activeResult + 1); }
+    else if (event.key === "ArrowUp" && open_) { event.preventDefault(); setActiveResult(activeResult - 1); }
+    else if (event.key === "Enter" && open_) {
+      const rows = $("search-results").querySelectorAll(".sr-item");
+      const row = rows[activeResult < 0 ? 0 : activeResult];
+      if (row) { event.preventDefault(); row.click(); }
+    } else if (event.key === "Escape" && open_) { event.preventDefault(); hideResults(); }
+  });
+  window.addEventListener("resize", () => { if (!$("search-results").hidden) placeResults(); });
+  $("search-mode").addEventListener("change", () => {
+    $("search").placeholder = $("search-mode").value === "ranked" ? "Search concepts" : "Filter by title, path or tag";
+    applyFilters();
+  });
+  $("filter-trust").addEventListener("change", applyFilters);
+  $("filter-fresh").addEventListener("change", applyFilters);
   $("filter-type").addEventListener("change", applyFilters);
 
   $("layout").addEventListener("change", () => {
@@ -2340,6 +2584,8 @@ const JS = `
     { key: "tags", label: "Tags", value: (d) => d.tags.join(" ").toLowerCase() },
     { key: "in", label: "In", num: true, value: (d) => (backlinks[d.id] || []).length },
     { key: "out", label: "Out", num: true, value: (d) => (outLinks[d.id] || []).length },
+    // Only while a ranked query is active: how well each concept matches it.
+    { key: "match", label: "Match", num: true, value: (d) => (rankedIds && rankedIds.has(d.id) ? ranking.find((h) => h.entry.id === d.id).score : 0) },
   ];
   let sort = { key: "title", dir: 1 };
   for (const column of COLUMNS) {
@@ -2350,6 +2596,7 @@ const JS = `
     button.textContent = column.label;
     button.addEventListener("click", () => {
       sort = { key: column.key, dir: sort.key === column.key ? -sort.dir : 1 };
+      userSorted = true;
       refreshTable();
     });
     th.append(button);
@@ -2359,6 +2606,8 @@ const JS = `
 
   function refreshTable() {
     const column = COLUMNS.find((c) => c.key === sort.key);
+    const scores = new Map(ranking.map((h) => [h.entry.id, h.score]));
+    COLUMNS.find((c) => c.key === "match").th.hidden = !rankedIds;
     for (const c of COLUMNS) {
       if (c === column) c.th.setAttribute("aria-sort", sort.dir === 1 ? "ascending" : "descending");
       else c.th.removeAttribute("aria-sort");
@@ -2407,6 +2656,7 @@ const JS = `
         cell(String((backlinks[d.id] || []).length), "num"),
         cell(String((outLinks[d.id] || []).length), "num"),
       );
+      if (rankedIds) tr.append(cell((scores.get(d.id) || 0).toFixed(2), "num"));
       return tr;
     }));
   }
@@ -2459,6 +2709,9 @@ const JS = `
   $("reset").addEventListener("click", () => {
     $("search").value = "";
     $("filter-type").value = "";
+    $("filter-trust").value = "";
+    $("filter-fresh").value = "";
+    userSorted = false;
     applyFilters();
     clearFocus();
     if (hood) applyHood();

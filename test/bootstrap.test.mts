@@ -47,6 +47,7 @@ describe('bootstrap', () => {
       'scripts/okf-mermaid.mts',
       'scripts/okf-search.mts',
       'scripts/okf-core.mts',
+      'scripts/okf-rank.mts',
       'okf-concept-template.md',
       'okf-explainer-template.md',
     ]) {

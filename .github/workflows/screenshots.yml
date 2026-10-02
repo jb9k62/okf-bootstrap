@@ -9,6 +9,7 @@ on:
     paths:
       - skills/okf-bootstrap/assets/okf-view.mts
       - skills/okf-bootstrap/assets/okf-core.mts
+      - skills/okf-bootstrap/assets/okf-rank.mts
       - skills/okf-bootstrap/assets/templates/okf-widgets/src/**
       - examples/demo/**
       - scripts/screenshots.mts

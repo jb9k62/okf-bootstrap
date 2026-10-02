@@ -58,74 +58,42 @@ import {
   normalizeVerified,
   parseDocument,
   RESERVED,
-  stripCode,
   trustTier,
 } from './okf-core.mts';
+import {
+  buildEntry,
+  buildIndex,
+  freshness,
+  freshnessLabel,
+  hasFilters,
+  matchesFilters,
+  NO_FILTERS,
+  search,
+  snippet,
+  stripCode,
+  tokenize,
+} from './okf-rank.mts';
+import { DAY } from './okf-rank.mts';
+import type { Entry, EntryMeta, Filters, Freshness, Hit, RankIndex } from './okf-rank.mts';
 
-// The cache is only valid for the code that wrote it: a hash of this file and okf-core.mts,
-// so a refreshed copy of either tool never reads entries a different tokenizer produced.
+// The cache is only valid for the code that wrote it: a hash of this file, okf-core.mts and
+// okf-rank.mts, so a refreshed copy of any never reads entries a different tokenizer produced.
 const CACHE_VERSION = crypto
   .createHash('sha1')
   .update(fs.readFileSync(fileURLToPath(import.meta.url)))
   .update(fs.readFileSync(fileURLToPath(new URL('./okf-core.mts', import.meta.url))))
+  .update(fs.readFileSync(fileURLToPath(new URL('./okf-rank.mts', import.meta.url))))
   .digest('hex')
   .slice(0, 12);
 // A file modified this close to the cache being written may have changed again within the
 // same timestamp tick, so it is re-read rather than trusted.
 const RACY_MS = 2000;
 
-type Field = 'title' | 'tags' | 'path' | 'description' | 'headings' | 'body';
-const FIELDS: Field[] = ['title', 'tags', 'path', 'description', 'headings', 'body'];
-const FIELD_WEIGHT: Record<Field, number> = {
-  title: 5,
-  tags: 4,
-  path: 3,
-  description: 2.5,
-  headings: 2,
-  body: 1,
-};
-const K1 = 1.2;
-const B = 0.75;
-
-// What the spec says about a concept, as multipliers on its text score.
-const TRUST_BOOST: Record<string, number> = {
-  'human-reviewed': 1.15,
-  'machine-confirmed': 1.05,
-  unverified: 1,
-};
-const STALE_FACTOR = 0.6;
-const DEPRECATED_FACTOR = 0.5;
-const DRAFT_FACTOR = 0.85;
-const INLINK_STEP = 0.04; // per inbound link, capped at INLINK_CAP links
-const INLINK_CAP = 5;
-
 const TRUST_NAMES: Record<string, string> = {
   human: 'human-reviewed',
   machine: 'machine-confirmed',
   unverified: 'unverified',
 };
-
-interface Heading {
-  level: number;
-  text: string;
-}
-
-interface Entry {
-  id: string;
-  type: string;
-  title: string;
-  description: string;
-  tags: string[];
-  status: string;
-  trust: string;
-  stale_after: string;
-  generated_at: string;
-  verified_at: string;
-  links_to: string[];
-  headings: Heading[];
-  len: Record<Field, number>;
-  tf: Record<Field, Record<string, number>>;
-}
 
 interface Cached {
   size: number;
@@ -146,13 +114,8 @@ interface Skipped {
   reason: string;
 }
 
-interface Index {
-  entries: Entry[];
-  byId: Map<string, Entry>;
-  inlinks: Map<string, string[]>;
+interface Index extends RankIndex {
   skipped: Skipped[];
-  df: Map<string, number>;
-  avgLen: Record<Field, number>;
 }
 
 interface Options {
@@ -180,43 +143,7 @@ interface Options {
 
 class UsageError extends Error {}
 
-// --- tokenizing -------------------------------------------------------------
-
-/** A light plural stripper, so "retries" and "retry" (or "tags" and "tag") meet. */
-function stem(w: string): string {
-  if (w.length > 4 && w.endsWith('ies')) return w.slice(0, -3) + 'y';
-  if (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') && !w.endsWith('us')) {
-    return w.slice(0, -1);
-  }
-  return w;
-}
-
-function tokenize(text: string): string[] {
-  // camelCase and snake_case split into words; digits stay attached ("http2").
-  const spaced = text.replace(/([a-z0-9])([A-Z])/g, '$1 $2');
-  const words = spaced.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-  return words.map(stem);
-}
-
-function termCounts(text: string): { tf: Record<string, number>; len: number } {
-  const tf: Record<string, number> = Object.create(null);
-  const words = tokenize(text);
-  for (const w of words) tf[w] = (tf[w] ?? 0) + 1;
-  return { tf, len: words.length };
-}
-
 // --- indexing one file ------------------------------------------------------
-
-function headingsOf(body: string): Heading[] {
-  const out: Heading[] = [];
-  // stripCode keeps one output line per input line and blanks fenced code, so a
-  // "# comment" inside a code block is not a heading.
-  for (const line of stripCode(body).split(/\r?\n/)) {
-    const m = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
-    if (m) out.push({ level: m[1]!.length, text: m[2]! });
-  }
-  return out;
-}
 
 function latest(values: unknown[]): string {
   let best = '';
@@ -237,36 +164,21 @@ function indexFile(rel: string, bundleRoot: string, text: string): Entry {
     throw new Error('no non-empty `type` in frontmatter');
   }
   const id = rel.replace(/\.md$/, '');
-  const tags = Array.isArray(fm.tags) ? fm.tags.map(String) : fm.tags ? [String(fm.tags)] : [];
-  const headings = headingsOf(body);
-  const texts: Record<Field, string> = {
-    title: String(fm.title ?? id),
-    tags: tags.join(' '),
-    path: id,
-    description: String(fm.description ?? ''),
-    headings: headings.map((h) => h.text).join('\n'),
-    body,
-  };
-  const len = {} as Record<Field, number>;
-  const tf = {} as Record<Field, Record<string, number>>;
-  for (const f of FIELDS) ({ tf: tf[f], len: len[f] } = termCounts(texts[f]));
   const generated = fm.generated && typeof fm.generated === 'object' ? fm.generated : {};
-  return {
+  const meta: EntryMeta = {
     id,
     type: String(fm.type),
-    title: texts.title,
-    description: texts.description,
-    tags,
+    title: String(fm.title ?? id),
+    description: String(fm.description ?? ''),
+    tags: Array.isArray(fm.tags) ? fm.tags.map(String) : fm.tags ? [String(fm.tags)] : [],
     status: String(fm.status ?? 'stable').toLowerCase(),
     trust: trustTier(fm),
     stale_after: fm.stale_after == null ? '' : String(fm.stale_after),
     generated_at: String((generated as Record<string, unknown>).at ?? ''),
     verified_at: latest(normalizeVerified(fm).map((v) => v.at)),
     links_to: extractLinks(body, path.dirname(path.join(bundleRoot, rel)), bundleRoot),
-    headings,
-    len,
-    tf,
   };
+  return buildEntry(meta, body);
 }
 
 // --- the cache --------------------------------------------------------------
@@ -361,85 +273,10 @@ function loadIndex(bundleRoot: string, useCache: boolean): Index {
   if (old && Object.keys(old.files).length !== Object.keys(next.files).length) changed = true;
   if (file && changed) writeCache(file, next);
 
-  const byId = new Map(entries.map((e) => [e.id, e]));
-  const inlinks = new Map<string, string[]>();
-  const df = new Map<string, number>();
-  const total = Object.fromEntries(FIELDS.map((f) => [f, 0])) as Record<Field, number>;
-  for (const e of entries) {
-    for (const t of e.links_to) {
-      if (t === e.id || !byId.has(t)) continue;
-      const list = inlinks.get(t) ?? [];
-      list.push(e.id);
-      inlinks.set(t, list);
-    }
-    const seen = new Set<string>();
-    for (const f of FIELDS) {
-      total[f] += e.len[f];
-      for (const t of Object.keys(e.tf[f])) seen.add(t);
-    }
-    for (const t of seen) df.set(t, (df.get(t) ?? 0) + 1);
-  }
-  const n = Math.max(entries.length, 1);
-  const avgLen = Object.fromEntries(FIELDS.map((f) => [f, Math.max(total[f] / n, 1)])) as Record<
-    Field,
-    number
-  >;
-  return { entries, byId, inlinks, skipped, df, avgLen };
+  return { ...buildIndex(entries), skipped };
 }
 
-// --- freshness --------------------------------------------------------------
-
-const DAY = 86_400_000;
-
-interface Freshness {
-  state: 'stale' | 'fresh' | 'no-expiry';
-  /** Whole days past `stale_after` (stale) or until it (fresh). */
-  days: number | null;
-}
-
-function freshness(e: Entry, now: Date): Freshness {
-  const t = e.stale_after ? new Date(e.stale_after).getTime() : NaN;
-  if (Number.isNaN(t)) return { state: 'no-expiry', days: null };
-  const delta = t - now.getTime();
-  // SPEC §5.5: stale when now >= stale_after.
-  return delta <= 0
-    ? { state: 'stale', days: Math.floor(-delta / DAY) }
-    : { state: 'fresh', days: Math.ceil(delta / DAY) };
-}
-
-function freshnessLabel(f: Freshness): string {
-  if (f.state === 'stale') return f.days === 0 ? 'stale today' : `stale ${f.days}d`;
-  if (f.state === 'fresh') return `fresh, ${f.days}d left`;
-  return 'no expiry';
-}
-
-// --- filtering --------------------------------------------------------------
-
-function matchesFilters(e: Entry, o: Options, idx: Index): boolean {
-  if (o.type && e.type.toLowerCase() !== o.type.toLowerCase()) return false;
-  if (o.status && e.status !== o.status.toLowerCase()) return false;
-  if (o.trust && !o.trust.includes(e.trust)) return false;
-  if (o.tags.length) {
-    const have = new Set(e.tags.map((t) => t.toLowerCase()));
-    if (!o.tags.every((t) => have.has(t.toLowerCase()))) return false;
-  }
-  const f = freshness(e, o.now);
-  if (o.freshness === 'stale' && f.state !== 'stale') return false;
-  if (o.freshness === 'fresh' && f.state === 'stale') return false;
-  if (o.expiresWithin !== null) {
-    if (f.state !== 'fresh') return false;
-    if (new Date(e.stale_after).getTime() - o.now.getTime() > o.expiresWithin) return false;
-  }
-  if (o.linkedFrom) {
-    const src = resolveId(idx, o.linkedFrom);
-    if (!src.links_to.includes(e.id)) return false;
-  }
-  if (o.linksTo) {
-    const dst = resolveId(idx, o.linksTo);
-    if (!e.links_to.includes(dst.id)) return false;
-  }
-  return true;
-}
+// --- resolving ids and filters ------------------------------------------------
 
 function normalizeId(raw: string): string {
   return raw.trim().replace(/^\/+/, '').replace(/\.md$/, '');
@@ -457,103 +294,18 @@ function resolveId(idx: Index, raw: string): Entry {
   );
 }
 
-// --- ranking ----------------------------------------------------------------
-
-interface Hit {
-  entry: Entry;
-  score: number;
-  text: number;
-  adjust: Array<{ why: string; factor: number }>;
-  matched: string[];
-}
-
-/** One query word and the bundle words it stands for. */
-interface QueryTerm {
-  word: string;
-  expansions: Array<{ term: string; weight: number }>;
-}
-
-const MAX_PREFIX_EXPANSIONS = 25;
-
-/** Done once per query, not per concept: a word in the bundle is itself; otherwise a prefix. */
-function expandQuery(idx: Index, words: string[]): QueryTerm[] {
-  return words.map((word) => {
-    if (idx.df.has(word)) return { word, expansions: [{ term: word, weight: 1 }] };
-    if (word.length < 3) return { word, expansions: [] };
-    // Not in the bundle: treat it as a prefix ("retr" finds "retry"), at a lower weight, and
-    // keep the commonest few so a short prefix cannot fan out across the vocabulary.
-    const found: string[] = [];
-    for (const v of idx.df.keys()) if (v.startsWith(word)) found.push(v);
-    found.sort((a, b) => idx.df.get(b)! - idx.df.get(a)! || a.localeCompare(b));
-    return { word, expansions: found.slice(0, MAX_PREFIX_EXPANSIONS).map((term) => ({ term, weight: 0.6 })) };
-  });
-}
-
-const present = (e: Entry, term: string) => FIELDS.some((f) => e.tf[f][term]);
-
-/** Each query word scores as its best expansion, so a family of related words cannot outvote the word asked for. */
-function bm25f(idx: Index, e: Entry, query: QueryTerm[]): number {
-  const n = idx.entries.length;
-  let score = 0;
-  for (const { expansions } of query) {
-    let best = 0;
-    for (const { term, weight } of expansions) {
-      if (!present(e, term)) continue;
-      const df = idx.df.get(term) ?? 0;
-      const idf = Math.log(1 + (n - df + 0.5) / (df + 0.5));
-      let tfw = 0;
-      for (const f of FIELDS) {
-        const c = e.tf[f][term];
-        if (!c) continue;
-        tfw += (FIELD_WEIGHT[f] * c) / (1 - B + (B * e.len[f]) / idx.avgLen[f]);
-      }
-      best = Math.max(best, weight * idf * (tfw / (K1 + tfw)));
-    }
-    score += best;
-  }
-  return score;
-}
-
-function adjustments(e: Entry, o: Options, idx: Index): Hit['adjust'] {
-  const out: Hit['adjust'] = [];
-  if (freshness(e, o.now).state === 'stale') out.push({ why: 'stale', factor: STALE_FACTOR });
-  if (e.status === 'deprecated') out.push({ why: 'deprecated', factor: DEPRECATED_FACTOR });
-  if (e.status === 'draft') out.push({ why: 'draft', factor: DRAFT_FACTOR });
-  const boost = TRUST_BOOST[e.trust] ?? 1;
-  if (boost !== 1) out.push({ why: e.trust, factor: boost });
-  const inbound = idx.inlinks.get(e.id)?.length ?? 0;
-  if (inbound) {
-    out.push({
-      why: `${inbound} inbound link${inbound === 1 ? '' : 's'}`,
-      factor: 1 + INLINK_STEP * Math.min(inbound, INLINK_CAP),
-    });
-  }
-  return out;
-}
-
-function search(idx: Index, o: Options, query: string): Hit[] {
-  const terms = [...new Set(tokenize(query))];
-  const expanded = expandQuery(idx, terms);
-  const hits: Hit[] = [];
-  for (const e of idx.entries) {
-    if (!matchesFilters(e, o, idx)) continue;
-    const adjust = adjustments(e, o, idx);
-    const factor = adjust.reduce((p, a) => p * a.factor, 1);
-    if (terms.length === 0) {
-      hits.push({ entry: e, score: 0, text: 0, adjust, matched: [] });
-      continue;
-    }
-    const matched = expanded
-      .filter(({ expansions }) => expansions.some(({ term }) => present(e, term)))
-      .map(({ word }) => word);
-    if (matched.length === 0) continue;
-    if (o.all && matched.length < terms.length) continue;
-    const text = bm25f(idx, e, expanded);
-    hits.push({ entry: e, score: text * factor, text, adjust, matched });
-  }
-  // Ties (and the empty query) fall back to the title, so output is deterministic.
-  hits.sort((a, b) => b.score - a.score || a.entry.title.localeCompare(b.entry.title) || a.entry.id.localeCompare(b.entry.id));
-  return hits;
+/** The command line's filters, with the concepts they name resolved once. */
+function filtersOf(o: Options, idx: Index): Filters {
+  return {
+    tags: o.tags,
+    type: o.type,
+    status: o.status,
+    trust: o.trust,
+    freshness: o.freshness,
+    expiresWithin: o.expiresWithin,
+    linkedFrom: o.linkedFrom ? resolveId(idx, o.linkedFrom) : null,
+    linksTo: o.linksTo ? resolveId(idx, o.linksTo) : null,
+  };
 }
 
 // --- reading a concept ------------------------------------------------------
@@ -564,25 +316,6 @@ function readBody(bundleRoot: string, e: Entry): string {
   } catch {
     return '';
   }
-}
-
-/** The body line that matches the most query terms, trimmed around the first match. */
-function snippet(body: string, terms: string[]): string {
-  if (terms.length === 0) return '';
-  const want = new Set(terms);
-  let best = '';
-  let bestScore = 0;
-  for (const raw of stripCode(body).split(/\r?\n/)) {
-    const line = raw.trim();
-    if (!line || /^[|\-:\s]+$/.test(line)) continue;
-    const have = new Set(tokenize(line).filter((t) => want.has(t) || [...want].some((w) => w.length >= 3 && t.startsWith(w))));
-    if (have.size > bestScore) {
-      bestScore = have.size;
-      best = line;
-    }
-  }
-  const plain = best.replace(/^#+\s+|^[-*>]\s+/, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`]/g, '');
-  return plain.length > 160 ? plain.slice(0, 157) + '...' : plain;
 }
 
 function section(body: string, want: string): string | null {
@@ -628,19 +361,18 @@ function print(o: Options, data: unknown, text: () => string): void {
 
 function cmdSearch(idx: Index, o: Options, bundleRoot: string): void {
   const query = o.args.join(' ').trim();
-  const filtered =
-    o.tags.length || o.type || o.status || o.trust || o.freshness || o.expiresWithin !== null || o.linkedFrom || o.linksTo;
+  const filters = filtersOf(o, idx);
+  const filtered = hasFilters(filters);
   if (!query && !filtered) throw new UsageError('search needs a query or at least one filter');
   if (query && tokenize(query).length === 0 && !filtered) {
     throw new UsageError(`"${query}" has no searchable words`);
   }
-  const all = search(idx, o, query);
+  const all = search(idx, filters, o.now, query, o.all);
   const shown = all.slice(0, o.limit);
-  const terms = [...new Set(tokenize(query))];
   const results = shown.map((h) => ({
     ...summary(h.entry, o),
     score: Number(h.score.toFixed(3)),
-    snippet: snippet(readBody(bundleRoot, h.entry), terms),
+    snippet: snippet(readBody(bundleRoot, h.entry), query, h.entry.title),
     ...(o.explain ? { explain: { text: Number(h.text.toFixed(3)), adjust: h.adjust, matched: h.matched } } : {}),
   }));
   print(o, { query, total: all.length, results }, () => {
@@ -754,9 +486,9 @@ function cmdStale(idx: Index, o: Options): void {
   if (o.freshness) throw new UsageError('stale already lists only stale concepts; drop --fresh/--stale');
   // Overdue first, then (with --expires-within) what is about to be. The window is applied
   // here, not by matchesFilters, which would drop the overdue ones.
-  const base: Options = { ...o, freshness: null, expiresWithin: null };
+  const base: Filters = { ...filtersOf(o, idx), freshness: null, expiresWithin: null };
   const rows = idx.entries
-    .filter((e) => matchesFilters(e, base, idx))
+    .filter((e) => matchesFilters(e, base, o.now))
     .map((e) => ({ e, f: freshness(e, o.now) }))
     .filter(({ e, f }) =>
       f.state === 'stale' ||

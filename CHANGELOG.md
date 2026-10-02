@@ -7,8 +7,13 @@
   and inbound links (`--explain` shows how). Commands: `search`, `show` (`--outline`, `--section`),
   `related`, `facets`, `stale`; filters for tag, type, status, trust, freshness, expiry window and
   links; `--json` throughout. No daemon: a cache keyed by each file's mtime and size is re-checked on
-  every run. The parsing the viewer and search share moved to `scripts/okf-core.mts`, which the
-  scaffold now copies too.
+  every run. The parsing the viewer and search share moved to `scripts/okf-core.mts`, and the ranking to
+  `scripts/okf-rank.mts`; the scaffold copies both.
+- **Ranked search in the viewer**: the search box runs the same ranking as `okf-search`, in the page.
+  A results list shows each concept's trust, freshness and best-matching line (hover for the score
+  arithmetic; arrows and Enter work), non-matches dim in the graph and drop out of the tree, and the
+  table gains a Match column. New trust and freshness filters sit beside the type filter, and a
+  mode switch keeps the old plain "contains" match.
 - **Better on phones**: the viewer's top bar is now a search box and one swipeable row of
   controls (it used to fill half the screen), the graph is shorter and its colour key is a single
   line. Widgets get touch-sized controls, full-width sliders and two-column short lists on narrow

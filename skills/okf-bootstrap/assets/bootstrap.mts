@@ -13,6 +13,7 @@
  *   scripts/okf-mermaid.mts   : mermaid parse checker via mmdc (copied verbatim)
  *   scripts/okf-search.mts    : ranked, freshness-aware search for agents (copied verbatim)
  *   scripts/okf-core.mts      : parsing shared by the view and search tools (copied verbatim)
+ *   scripts/okf-rank.mts      : the ranking, shared by search and the viewer's search box (copied verbatim)
  *   okf-concept-template.md   : authoring aid for a reference concept (outside the bundle)
  *   okf-explainer-template.md : authoring aid for a guided tour: callouts, widgets, a quiz
  *   packages/okf-widgets/     : with --widgets, the React micro-world package (a workspace)
@@ -49,7 +50,7 @@ const TEMPLATES = path.join(HERE, 'templates');
 // The producer stamped into scaffolded frontmatter (OKF actor convention: <producer>/<version>).
 // Kept equal to package.json's version by the test suite.
 const VERSION = '0.3.0';
-const TOOLS = ['okf-view', 'okf-mermaid', 'okf-search', 'okf-core'] as const;
+const TOOLS = ['okf-view', 'okf-mermaid', 'okf-search', 'okf-core', 'okf-rank'] as const;
 const LEGACY_MJS: readonly string[] = ['okf-view', 'okf-mermaid'];
 const WIDGETS_DIR = 'packages/okf-widgets';
 const WIDGETS_PKG = 'okf-widgets';
@@ -292,6 +293,7 @@ console.log('  scripts/okf-view.mts       (validator + viewer + --check-render) 
 console.log('  scripts/okf-mermaid.mts    (mermaid parse check via mmdc)         refreshed');
 console.log('  scripts/okf-search.mts     (ranked, freshness-aware search)       refreshed');
 console.log('  scripts/okf-core.mts       (parsing shared by view and search)    refreshed');
+console.log('  scripts/okf-rank.mts       (the ranking, also run in the viewer)  refreshed');
 if (created.length) {
   console.log('\nCreated:');
   for (const f of created) console.log('  ' + f);

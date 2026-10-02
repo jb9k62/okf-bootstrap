@@ -98,7 +98,8 @@ refreshed, and older `.mjs` copies are removed.
 Do not read a whole bundle to answer a question. `npm run okf:search -- <command>` ranks
 concepts by text and by what the spec says about them (trust tier, stale, deprecated, links):
 `facets` (the tags and types in use), `search "query" [--fresh --tag t --trust human]`,
-`show <id> --outline` then `--section <heading>`, `related <id>`, `stale`. Add `--json`. Treat a
+`show <id> --outline` then `--section <heading>`, `related <id>`, `stale`. Add `--json`. The
+viewer's search box runs the same ranking. Treat a
 `stale` or `unverified` hit as a lead to check, not a fact. Details: the playbook's "Finding concepts".
 
 ## Writing rules (short version)

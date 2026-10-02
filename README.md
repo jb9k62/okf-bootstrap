@@ -146,6 +146,7 @@ npm run okf:validate        # types, links, timestamps: expect 0 issues
 npm run okf:view            # writes okf/viz.html; open it in a browser
 npm run okf:mermaid         # every diagram parses
 npm run okf:mermaid:render  # every diagram renders, every quiz and widget works
+npm run okf:search -- search "retry policy" --fresh   # ranked, freshness-aware lookup for agents
 ```
 
 Re-running the scaffold is safe: it keeps everything you wrote and refreshes only the tools.

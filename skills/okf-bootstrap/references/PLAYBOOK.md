@@ -24,13 +24,15 @@ Paths are relative to the skill directory.
 | `assets/bootstrap.mts` | Turnkey scaffold: copies templates + tools into a target project. |
 | `assets/okf-view.mts` | The validator + viewer, based on the Google `knowledge-catalog` reference viewer; also the render gate under `--check-render`. |
 | `assets/okf-mermaid.mts` | Parses every mermaid block in the bundle with mermaid-cli (`mmdc`); self-contained. |
+| `assets/okf-search.mts` | Ranked search over the bundle that understands trust tier, staleness, tags and links; see "Finding concepts". |
+| `assets/okf-core.mts` | Parsing shared by the viewer and search: frontmatter, trust tier, staleness, links. |
 | `assets/templates/okf/` | `index.md`, `log.md` (reserved), `adr/readme.md`, `adr/template.md`. |
 | `assets/templates/concept.md` | Ready-to-fill reference concept (scaffolded as `okf-concept-template.md`). |
 | `assets/templates/explainer.md` | Ready-to-fill guided tour (scaffolded as `okf-explainer-template.md`). |
 | `assets/templates/okf-widgets/` | The React widget package (scaffolded to `packages/okf-widgets` by `--widgets`). |
 | `assets/templates/package-json-scripts.md` | The `okf:` npm scripts and CLI reference. |
 
-All three tools are TypeScript that Node 24+ runs directly (type stripping): no build step,
+All the tools are TypeScript that Node 24+ runs directly (type stripping): no build step,
 and `.mts` is always ESM, so a project's `package.json` `"type"` is never touched.
 
 ---
@@ -48,10 +50,10 @@ This creates:
 - `okf/index.md`, `okf/log.md`
 - `okf/adr/readme.md`, `okf/adr/template.md`
 - `okf/design/` and `okf/<slug>/` (blank, with `.gitkeep`)
-- `scripts/okf-view.mts` (the validator + viewer) and `scripts/okf-mermaid.mts` (the Mermaid parse checker)
+- `scripts/okf-view.mts` (the validator + viewer), `scripts/okf-mermaid.mts` (the Mermaid parse checker), `scripts/okf-search.mts` (search) and `scripts/okf-core.mts` (parsing they share)
 - `okf-concept-template.md` and `okf-explainer-template.md` (authoring aids, kept *outside* the bundle so they are not scanned)
 - with `--widgets`: `packages/okf-widgets/`, added to the npm `workspaces`
-- adds `okf:validate`, `okf:fix`, `okf:view`, `okf:mermaid`, `okf:mermaid:render` (and with widgets,
+- adds `okf:validate`, `okf:fix`, `okf:view`, `okf:mermaid`, `okf:mermaid:render`, `okf:search` (and with widgets,
   `okf:widgets:build`, `okf:widgets:test`, `okf:widgets:typecheck`) to `package.json`, plus
   `yaml` as a devDependency
 
@@ -82,8 +84,8 @@ tooling into a project whose bundle is already written.
      `log.md` are **reserved** and do **not** need a `type`.
    - `log.md`: dated update history.
    - `adr/readme.md` and `adr/template.md`: the decisions area.
-3. **Copy the tools** to `scripts/okf-view.mts` and `scripts/okf-mermaid.mts` (from the
-   skill's `assets/`).
+3. **Copy the tools** `okf-view.mts`, `okf-mermaid.mts`, `okf-search.mts` and `okf-core.mts`
+   to `scripts/` (from the skill's `assets/`).
 4. **Add npm scripts** to `package.json` (and `yaml` as a devDependency; no `"type"` change,
    the tools are `.mts`):
    ```jsonc
@@ -91,7 +93,8 @@ tooling into a project whose bundle is already written.
    "okf:fix":            "node scripts/okf-view.mts okf --validate --fix",
    "okf:view":           "node scripts/okf-view.mts okf",
    "okf:mermaid":        "node scripts/okf-mermaid.mts okf",
-   "okf:mermaid:render": "node scripts/okf-view.mts okf --check-render"
+   "okf:mermaid:render": "node scripts/okf-view.mts okf --check-render",
+   "okf:search":         "node scripts/okf-search.mts"
    ```
 5. **Author the first concepts** in `okf/<slug>/` (overview, architecture, domain model, API)
    and record the first ADR, including the one for using OKF itself (see the checklist below).
@@ -229,6 +232,31 @@ The viewer derives per concept:
 - **Trust tier**: `unverified` (no `verified`), `human-reviewed` (any `verified.by` starts
   with `human:`), else `machine-confirmed`.
 - **Stale**: true when `stale_after` is a date on or before today.
+
+### Finding concepts (`okf-search.mts`)
+
+Before reading files, ask the bundle. `npm run okf:search -- <command>` (default bundle
+`okf/`; `--bundle <dir>` for another) ranks concepts by BM25F over title, tags, path,
+description, headings and body, then applies the spec: stale (§5.5) and `deprecated` (§5.4)
+concepts are demoted and flagged, never hidden; `human-reviewed` outranks `machine-confirmed`
+outranks `unverified` (§5.3); concepts others link to get a small boost. `--explain` shows the
+arithmetic. Add `--json` for agents.
+
+```bash
+npm run okf:search -- facets                          # the tags, types, trust tiers in use; start here
+npm run okf:search -- search "retry backoff" --fresh  # ranked; --tag, --type, --status, --trust human,machine
+npm run okf:search -- show parcel-tracker/retry-policy --outline   # headings only
+npm run okf:search -- show parcel-tracker/retry-policy --section "Why"   # one section, not the file
+npm run okf:search -- related adr/0003-full-jitter-retries   # links, backlinks, shared tags
+npm run okf:search -- stale --expires-within 14d      # the review queue
+```
+
+The workflow for an agent: `facets` to learn the vocabulary, `search` with filters, `show
+--outline` then `show --section` to read only what is needed, `related` to follow links. Prefer
+`--fresh` or check the `freshness` field before relying on a concept; a stale one may be out of
+date. A cache under `node_modules/.cache/okf-search/` (or the OS temp dir) is keyed by each
+file's mtime and size, re-checked on every run; `--no-cache` skips it. Files it cannot index
+(bad frontmatter, no `type`) are named on stderr; `--strict` makes that exit 1.
 
 ### Mermaid (two gates)
 

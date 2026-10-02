@@ -45,6 +45,8 @@ describe('bootstrap', () => {
       'okf/plain-app/.gitkeep',
       'scripts/okf-view.mts',
       'scripts/okf-mermaid.mts',
+      'scripts/okf-search.mts',
+      'scripts/okf-core.mts',
       'okf-concept-template.md',
       'okf-explainer-template.md',
     ]) {
@@ -54,6 +56,7 @@ describe('bootstrap', () => {
     const pkg = pkgOf(dir);
     assert.equal(pkg.scripts['okf:view'], 'node scripts/okf-view.mts okf');
     assert.equal(pkg.scripts['okf:fix'], 'node scripts/okf-view.mts okf --validate --fix');
+    assert.equal(pkg.scripts['okf:search'], 'node scripts/okf-search.mts');
     assert.equal(pkg.scripts['okf:widgets:build'], undefined);
     assert.ok(pkg.devDependencies.yaml);
     assert.equal(pkg.type, undefined, 'the tools are .mts; package.json "type" stays alone');
@@ -61,6 +64,10 @@ describe('bootstrap', () => {
     const v = run(path.join(dir, 'scripts', 'okf-view.mts'), ['okf', '--validate', '--strict'], dir);
     assert.equal(v.code, 0, v.out);
     assert.match(v.out, /issues\s+: 0/);
+    // The scaffolded search tool runs beside its shared parser and finds the scaffolded ADR index.
+    const q = run(path.join(dir, 'scripts', 'okf-search.mts'), ['search', 'decision', '--bundle', 'okf', '--json'], dir);
+    assert.equal(q.code, 0, q.out);
+    assert.ok(JSON.parse(q.out).total >= 1);
     assert.match(read(path.join(dir, 'okf', 'index.md')), /^# Plain App$/m);
     // Scaffolded timestamps follow SPEC §5 (datetime with offset), or validate above would fail.
     assert.match(read(path.join(dir, 'okf', 'adr', 'readme.md')), /at: \d{4}-\d{2}-\d{2}T[\d:]+Z/);

@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **`okf-search`**: ranked, spec-aware search for agents and people (`npm run okf:search --`). BM25F over
+  title, tags, path, description, headings and body, adjusted by trust tier, `stale_after`, `status`
+  and inbound links (`--explain` shows how). Commands: `search`, `show` (`--outline`, `--section`),
+  `related`, `facets`, `stale`; filters for tag, type, status, trust, freshness, expiry window and
+  links; `--json` throughout. No daemon: a cache keyed by each file's mtime and size is re-checked on
+  every run. The parsing the viewer and search share moved to `scripts/okf-core.mts`, which the
+  scaffold now copies too.
 - **Better on phones**: the viewer's top bar is now a search box and one swipeable row of
   controls (it used to fill half the screen), the graph is shorter and its colour key is a single
   line. Widgets get touch-sized controls, full-width sliders and two-column short lists on narrow

@@ -1,0 +1,5 @@
+{ "hooks": {
+  "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/probe.mts\"", "timeout": 5 }] }],
+  "PostToolUse":  [{ "matcher": "Read|Edit|Write", "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/probe.mts\"", "timeout": 5 }] }],
+  "Stop":         [{ "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/probe.mts\"", "timeout": 5 }] }]
+} }

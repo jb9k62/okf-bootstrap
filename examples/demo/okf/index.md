@@ -7,7 +7,7 @@ okf_version: "0.2"
 The knowledge bundle for **Parcel tracker**, a small (fictional) service that follows parcels
 across courier companies and tells customers where their delivery is. It is the demo for
 [okf-bootstrap](https://github.com/jb9k62/okf-bootstrap): reference concepts, decision
-records, and nine guided tours with interactive widgets and quizzes. Build it with
+records, and ten guided tours, most with interactive widgets, all with quizzes. Build it with
 `npm run demo`, then open `examples/demo/okf/viz.html`.
 
 ## Start here
@@ -30,6 +30,8 @@ records, and nine guided tours with interactive widgets and quizzes. Build it wi
   `hash % servers`, and why each server needs many points
 * [Guided tour: have we seen this event?](/tours/bloom-explainer.md) - a Bloom filter's bits,
   and why a "yes" must still be checked
+* [Guided tour: what does the agent remember?](/tours/memory-explainer.md) - lessons with a
+  receipt, and how code notices when one stops being true
 
 ## The service
 
@@ -44,3 +46,9 @@ records, and nine guided tours with interactive widgets and quizzes. Build it wi
 ## Decisions
 
 * [Decision records](/adr/readme.md)
+
+## Agent memory
+
+What agents have learned about Parcel tracker lives in a second bundle, `examples/demo/edukai/`
+([ADR-0004](/adr/0004-agent-memory-in-a-second-bundle.md)). Try it with `npm run demo:edukai`;
+the walkthrough is `examples/demo/README.md`.

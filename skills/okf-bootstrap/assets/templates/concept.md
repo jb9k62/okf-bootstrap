@@ -33,7 +33,9 @@ repeating its content.
   timestamp is an ISO 8601 datetime with an offset, such as `2026-06-30T14:00:00Z`. A bare
   date is reported by `okf:validate`.
 - `sources` should point at the code or document this concept describes, not at a summary
-  document the text was copied from.
+  document the text was copied from. A path from the project root also feeds
+  `npm run okf:recheck`: after `node scripts/okf-edukai.mts verify <concept> --bundle okf
+  --by <actor>` pins it, the re-check reports when that file changes.
 - Leave `status` out. It defaults to `stable`. Set it to `draft` while still writing, or
   `deprecated` once the concept no longer applies.
 - Don't add `verified` until a person has actually reviewed this text: an unreviewed

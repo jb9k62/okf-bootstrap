@@ -36,14 +36,19 @@ project's `.js` files are loaded.
   "okf:view":           "node scripts/okf-view.mts okf",
   "okf:mermaid":        "node scripts/okf-mermaid.mts okf",
   "okf:mermaid:render": "node scripts/okf-view.mts okf --check-render",
-  "okf:search":         "node scripts/okf-search.mts"
+  "okf:search":         "node scripts/okf-search.mts",
+  "okf:recheck":        "node scripts/okf-edukai.mts recheck --bundle okf"
 }
 ```
 
+`okf:recheck` reports concepts whose pinned `sources` changed or went missing, and those past
+`stale_after`. A source is pinned by `node scripts/okf-edukai.mts verify <concept> --bundle okf
+--by <actor>`; a concept that was never pinned is never flagged. Add `-- --strict` in CI.
+
 `okf:search` is not a gate; it is how an agent finds concepts without reading every file (`npm run
 okf:search -- search "query" --fresh`; see the playbook's "Finding concepts"). It needs `okf-core.mts`
-and `okf-rank.mts` beside it in `scripts/`, as does `okf-view.mts`: copy all five tools, or let the
-scaffold.
+and `okf-rank.mts` beside it in `scripts/`, as does `okf-view.mts`, which also imports the lesson
+rules from `okf-edukai-hook.mts`: copy all seven tools, or let the scaffold.
 
 `okf:fix` is not a gate: it rewrites the bundle's markdown so every ` ```mermaid ` `erDiagram`
 has its generated relationship key below it. `okf:validate` fails until it has been run.
@@ -60,6 +65,26 @@ With widgets (`--widgets`), the package is an npm workspace and is built first:
   "okf:widgets:typecheck": "npm run typecheck -w okf-widgets"
 }
 ```
+
+With the memory bundle (`--edukai`), which lives in `edukai/` beside `okf/`:
+
+```jsonc
+"scripts": {
+  "edukai:validate": "node scripts/okf-view.mts edukai --validate --strict && node scripts/okf-edukai.mts index --check",
+  "edukai:index":    "node scripts/okf-edukai.mts index",
+  "edukai:recheck":  "node scripts/okf-edukai.mts recheck",
+  "edukai:brief":    "node scripts/okf-edukai.mts index && node scripts/okf-edukai-hook.mts brief",
+  "edukai:search":   "node scripts/okf-search.mts --bundle edukai",
+  "edukai:view":     "node scripts/okf-view.mts edukai"
+}
+```
+
+`edukai:index` rebuilds the syllabus in `edukai/index.md` and the cache the harness hooks read
+(`node_modules/.cache/edukai/`, never committed): run it once after a clone. `edukai:recheck`
+is the queue of lessons that need an agent; `-- --write` renews the ones whose checks still
+hold, and `-- --strict` exits 1 on broken, failed or suspect lessons (a CI workflow to copy is
+at `templates/edukai-recheck.yml` in the skill). Lessons are written with
+`node scripts/okf-edukai.mts new|verify|supersede`; the `edukai` skill says when.
 
 All four should pass before committing bundle changes: `okf:validate` checks frontmatter
 link and timestamp conformance, `okf:mermaid` parses every mermaid block with `mmdc`, and

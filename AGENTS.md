@@ -1,9 +1,10 @@
 # AGENTS.md
 
-This repo is an **agent skill** (for pi and Claude Code) that scaffolds an
-[OKF](skills/okf-bootstrap/references/okf-spec/SPEC.md) knowledge bundle into other projects.
-It is not an app. What ships is `skills/okf-bootstrap/`; everything else (tests, scripts,
-demo, docs) supports it.
+This repo holds two **agent skills** (for pi and Claude Code) that scaffold
+[OKF](skills/okf-bootstrap/references/okf-spec/SPEC.md) knowledge bundles into other projects:
+`okf/`, design docs for the team, and `edukai/`, what agents have learned (the memory bundle).
+It is not an app. What ships is `skills/`, `hooks/` and `extensions/`; everything else (tests,
+scripts, demo, docs) supports them.
 
 ## Layout
 
@@ -16,10 +17,16 @@ demo, docs) supports it.
 | `skills/okf-bootstrap/assets/okf-search.mts` | Ranked, freshness-aware search (`search`, `show`, `related`, `facets`, `stale`) with an on-disk cache |
 | `skills/okf-bootstrap/assets/okf-rank.mts` | The ranking: pure, no imports. Run by `okf-search` and inlined (types stripped) into `viz.html` for its search box |
 | `skills/okf-bootstrap/assets/okf-core.mts` | Parsing shared by the viewer and search: frontmatter, trust tier, staleness, links |
+| `skills/okf-bootstrap/assets/okf-edukai.mts` | The memory bundle's tool: `new`, `verify`, `supersede`, `index`, `recheck`. Writes the cache the hooks read |
+| `skills/okf-bootstrap/assets/okf-edukai-hook.mts` | What the harness adapters run (`brief`, `cites`, `debt`, `hook`) and the code that derives a lesson's state. No dependencies |
+| `skills/edukai/SKILL.md` | The memory skill: what is worth a lesson, how sure we are, what to do with one that failed its re-check |
+| `hooks/hooks.json`, `hooks/edukai-hook.mjs` | Claude Code adapter: on SessionStart, PostToolUse and Stop it runs the launcher, plain JavaScript that exits quietly on a Node too old for TypeScript and otherwise calls `okf-edukai-hook.mts` |
+| `extensions/edukai.ts` | pi adapter: the same three moments. Declares the few pi types it uses |
 | `skills/okf-bootstrap/assets/templates/` | Files copied into target projects (`okf/`, concept and explainer templates, `okf-widgets/` React workspace) |
 | `skills/okf-bootstrap/references/` | `PLAYBOOK.md`, `EXPLAINERS.md`, and the vendored OKF spec |
 | `examples/demo/okf/` | "Parcel tracker" demo bundle; used by `npm run demo`, tests and screenshots |
-| `test/` | `bootstrap.test.mts` (unit), `render.e2e.mts` and `views.e2e.mts` (Chromium) |
+| `examples/demo/edukai/`, `examples/demo/src/` | The demo's memory bundle and the small source files its lessons cite; `examples/demo/README.md` is the walkthrough |
+| `test/` | `bootstrap.test.mts`, `search.test.mts`, `edukai.test.mts` (unit), `render.e2e.mts` and `views.e2e.mts` (Chromium) |
 | `scripts/` | Maintainer tools: `install-skill`, `okf-spec`, `screenshots` |
 | `vendor/knowledge-catalog` | Shallow git submodule pinning the upstream spec commit |
 | `docs/images/` | README screenshots, **generated** by `npm run screenshots` |
@@ -36,6 +43,7 @@ npm test              # node --test test/*.test.mts, plus the widget workspace's
 npm run test:render   # Chromium: diagrams, quizzes, widgets (needs `npx playwright install chromium`)
 npm run test:views    # Chromium: layouts, Graph/Tree/Table views, neighbourhood, colour modes
 npm run demo          # build widgets, then render examples/demo/okf to viz.html
+npm run demo:edukai   # the memory bundle: the session brief, then the re-check report
 npm run spec -- status   # is the vendored OKF spec current? (0 yes, 1 moved, 2 offline)
 ```
 
@@ -51,7 +59,7 @@ do not prove it reads well.
 - **Erasable TypeScript only**: no enums, namespaces or parameter properties. Imports name
   the real `.mts` extension. `tsconfig.json` enforces this.
 - **Tools must stay dependency-light.** `bootstrap.mts`, `okf-view.mts`, `okf-mermaid.mts`,
-  `okf-search.mts`, `okf-core.mts` and `okf-rank.mts` are copied into user projects as `scripts/okf-*.mts`. Don't import anything from outside
+  `okf-search.mts`, `okf-core.mts`, `okf-rank.mts`, `okf-edukai.mts` and `okf-edukai-hook.mts` are copied into user projects as `scripts/okf-*.mts`. Don't import anything from outside
   `skills/okf-bootstrap/assets/`, and resolve templates relative to the file itself.
 - **`viz.html` is one file**: no build step, libraries inlined. Don't add a bundler or a
   network fetch to the viewer.
@@ -70,13 +78,22 @@ do not prove it reads well.
 - **`okf-rank.mts` must stay pure** (no imports, no `fs`/`path`/`process`/DOM): the viewer inlines
   it into the page, so one ranking serves the CLI and the search box.
 
+- **`okf-edukai-hook.mts` must stay dependency-free**: it imports only `node:` built-ins and
+  `./okf-rank.mts`, never `okf-core.mts` or `yaml`, and never runs code from the project. It
+  runs from an installed plugin where `node_modules` may not exist, and its output is put in
+  front of an agent. A test enforces the imports and runs it outside the repo.
+- **The demo's memory bundle is pinned.** Lessons in `examples/demo/edukai/` hold digests of
+  files under `examples/demo/` (source files, and `okf/adr/0002-…` and `okf/parcel-tracker/api.md`).
+  Editing one of those changes a lesson's state and the report a test pins; the three changes
+  made on purpose are listed in `examples/demo/README.md`.
+
 - **Skill behaviour or flags**: update `SKILL.md` (and `PLAYBOOK.md` if it touches authoring
   rules) in the same change, plus a test in `test/bootstrap.test.mts` for scaffolder changes.
 - **Viewer features**: add to `test/views.e2e.mts` and show the demo bundle exercising it
   (add to `examples/demo/okf` if nothing there covers it).
 - **User-visible changes**: add a line under `## Unreleased` in `CHANGELOG.md`.
-- **Releases**: the version lives in three places and they must match: `package.json`,
-  `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`.
+- **Releases**: the version lives in four places and they must match: `package.json`,
+  `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and `VERSION` in `bootstrap.mts`.
 - **Vendored OKF spec**: never hand-edit `references/okf-spec/` or `vendor/`. Use
   `npm run spec -- update` (copies `SPEC.md`, `LICENSE.md`, writes `UPSTREAM.json`). CI
   runs `spec status` weekly and fails when upstream moves.

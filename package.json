@@ -1,8 +1,8 @@
 {
   "name": "okf-bootstrap",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
-  "description": "An agent skill (pi, Claude Code) that scaffolds an OKF knowledge bundle into a project: validator, graph viewer, Mermaid gates, and interactive React widgets for explainers.",
+  "description": "Agent skills (pi, Claude Code) that scaffold two OKF knowledge bundles into a project: design docs with a validator, graph viewer, Mermaid gates and interactive React widgets, and an agent memory bundle (edukai) that re-checks itself through harness hooks.",
   "license": "MIT",
   "type": "module",
   "keywords": [
@@ -22,6 +22,9 @@
   "pi": {
     "skills": [
       "./skills"
+    ],
+    "extensions": [
+      "./extensions"
     ]
   },
   "scripts": {
@@ -31,6 +34,11 @@
     "test:views": "node --test test/views.e2e.mts",
     "check": "npm run typecheck && npm test && npm run test:views",
     "demo": "npm run build -w okf-widgets && node skills/okf-bootstrap/assets/okf-view.mts examples/demo/okf --widgets skills/okf-bootstrap/assets/templates/okf-widgets/dist/okf-widgets.js",
+    "demo:edukai": "npm run demo:edukai:brief && npm run demo:edukai:recheck",
+    "demo:edukai:brief": "node skills/okf-bootstrap/assets/okf-edukai.mts index --bundle examples/demo/edukai --now 2026-10-15T00:00:00Z && node skills/okf-bootstrap/assets/okf-edukai-hook.mts brief --bundle examples/demo/edukai --now 2026-10-15T00:00:00Z",
+    "demo:edukai:recheck": "node skills/okf-bootstrap/assets/okf-edukai.mts recheck --bundle examples/demo/edukai --now 2026-10-15T00:00:00Z",
+    "demo:edukai:search": "node skills/okf-bootstrap/assets/okf-search.mts --bundle examples/demo/edukai --now 2026-10-15T00:00:00Z",
+    "demo:edukai:view": "node skills/okf-bootstrap/assets/okf-view.mts examples/demo/edukai",
     "install-skill": "node scripts/install-skill.mts",
     "spec": "node scripts/okf-spec.mts",
     "screenshots": "node scripts/screenshots.mts"

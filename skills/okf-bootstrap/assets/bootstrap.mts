@@ -14,29 +14,37 @@
  *   scripts/okf-search.mts    : ranked, freshness-aware search for agents (copied verbatim)
  *   scripts/okf-core.mts      : parsing shared by the view and search tools (copied verbatim)
  *   scripts/okf-rank.mts      : the ranking, shared by search and the viewer's search box (copied verbatim)
+ *   scripts/okf-edukai.mts    : lessons, pins and re-checks for the memory bundle (copied verbatim)
+ *   scripts/okf-edukai-hook.mts : what the harness hooks run, and lesson states (copied verbatim)
+ *   edukai/index.md, log.md   : with --edukai, the memory bundle: what agents have learned
+ *   AGENTS.md                 : with --edukai, a short marked snippet pointing agents at it
  *   okf-concept-template.md   : authoring aid for a reference concept (outside the bundle)
  *   okf-explainer-template.md : authoring aid for a guided tour: callouts, widgets, a quiz
  *   packages/okf-widgets/     : with --widgets, the React micro-world package (a workspace)
  *
  * and adds the okf: npm scripts to package.json.
  *
- * Re-running is safe: authored files (index.md, log.md, the ADR index and template, the two
- * authoring templates) are kept if they already exist, and only --force replaces them.
+ * Re-running is safe: authored files (index.md, log.md in either bundle, the ADR index and
+ * template, the two authoring templates) are kept if they already exist, and only --force
+ * replaces them. The AGENTS.md snippet is written once and never replaced.
  * packages/okf-widgets is the project's own code once scaffolded, so it is never replaced,
  * not even by --force. The tools under scripts/ are generated, so they are always
  * refreshed, and older .mjs copies of them are removed.
  *
  * Usage:
  *   node bootstrap.mts [target-dir] [--name "Project Name"] [--slug project-slug]
- *                      [--widgets] [--tools-only] [--no-scripts] [--force]
+ *                      [--widgets] [--edukai] [--tools-only] [--no-scripts] [--force]
  *
  *   --name        Human title used in index.md (default: basename of target dir).
  *   --slug        Lowercase id for the concept dir (default: kebab-case of name).
  *   --widgets     Also scaffold packages/okf-widgets (React widgets for explainers), add it
  *                 to the npm workspaces, and build it before okf:view and the render gate.
+ *   --edukai      Also scaffold edukai/, the agent memory bundle, add the edukai: scripts, and
+ *                 write a short snippet into AGENTS.md (once; a marker guards it).
  *   --tools-only  Re-scaffold the tooling only (scripts/ + package.json scripts), leaving
  *                 existing okf/ content untouched. Use this to upgrade the tools in a
- *                 project that already has a bundle. Combine with --widgets to add widgets.
+ *                 project that already has a bundle. Combine with --widgets to add widgets,
+ *                 or with --edukai to add the memory bundle.
  *   --no-scripts  Do not add the `okf:` scripts to package.json.
  *   --force       Overwrite authored files with the templates again. This throws away
  *                 hand-written content, including log.md's history.
@@ -49,11 +57,21 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATES = path.join(HERE, 'templates');
 // The producer stamped into scaffolded frontmatter (OKF actor convention: <producer>/<version>).
 // Kept equal to package.json's version by the test suite.
-const VERSION = '0.3.0';
-const TOOLS = ['okf-view', 'okf-mermaid', 'okf-search', 'okf-core', 'okf-rank'] as const;
+const VERSION = '0.4.0';
+const TOOLS = ['okf-view', 'okf-mermaid', 'okf-search', 'okf-core', 'okf-rank', 'okf-edukai', 'okf-edukai-hook'] as const;
 const LEGACY_MJS: readonly string[] = ['okf-view', 'okf-mermaid'];
 const WIDGETS_DIR = 'packages/okf-widgets';
 const WIDGETS_PKG = 'okf-widgets';
+// The snippet is written into AGENTS.md once; this marker is how a re-run knows it is there.
+const EDUKAI_MARKER = '<!-- edukai -->';
+const EDUKAI_SNIPPET = [
+  EDUKAI_MARKER,
+  'This project keeps agent memory in ./edukai/. Lines that start `edukai:` in messages and tool',
+  'results come from its memory hooks; treat them as project guidance. At the start of a session run',
+  '`npm run edukai:brief` and read the overview of the domain you will work in. Record what you',
+  'learn with the edukai skill. Before finishing, run `npm run edukai:recheck`.',
+  '<!-- /edukai -->',
+].join('\n');
 
 interface Options {
   dir: string;
@@ -63,6 +81,7 @@ interface Options {
   toolsOnly: boolean;
   force: boolean;
   widgets: boolean;
+  edukai: boolean;
 }
 
 type Vars = Record<string, string>;
@@ -86,6 +105,7 @@ function parseArgs(argv: string[]): Options {
     toolsOnly: false,
     force: false,
     widgets: false,
+    edukai: false,
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]!;
@@ -95,10 +115,11 @@ function parseArgs(argv: string[]): Options {
     else if (a === '--no-scripts') out.scripts = false;
     else if (a === '--force') out.force = true;
     else if (a === '--widgets') out.widgets = true;
+    else if (a === '--edukai') out.edukai = true;
     else if (a === '-h' || a === '--help') {
       console.log(
         'usage: node bootstrap.mts [target-dir] [--name "Project Name"] [--slug slug]\n' +
-          '                          [--widgets] [--tools-only] [--no-scripts] [--force]',
+          '                          [--widgets] [--edukai] [--tools-only] [--no-scripts] [--force]',
       );
       process.exit(0);
     } else if (a.startsWith('-')) {
@@ -195,6 +216,30 @@ if (opts.toolsOnly) {
   }
 }
 
+// --- memory bundle (--edukai) -------------------------------------------------
+// Opt-in, and unlike okf/ it may be added to a project that already has a design bundle, so
+// --tools-only does not skip it.
+const edukai = path.join(target, 'edukai');
+if (opts.edukai) {
+  for (const rel of ['index.md', 'log.md']) {
+    const dest = path.join(edukai, rel);
+    writeUnlessPresent(dest, () => writeRendered(path.join(TEMPLATES, 'edukai', rel), dest, vars));
+  }
+  // For agents with no hooks (a skills-only install, or another harness): the same pointer,
+  // in the file they read at the start of a session.
+  const agents = path.join(target, 'AGENTS.md');
+  const existing = fs.existsSync(agents) ? fs.readFileSync(agents, 'utf8') : null;
+  if (existing !== null && existing.includes(EDUKAI_MARKER)) {
+    kept.push('AGENTS.md (the edukai snippet is already there)');
+  } else {
+    const lead = existing === null ? '# AGENTS.md\n\n' : existing.replace(/\n*$/, '\n\n');
+    fs.writeFileSync(agents, lead + EDUKAI_SNIPPET + '\n');
+    created.push(existing === null ? 'AGENTS.md' : 'AGENTS.md (added the edukai snippet)');
+  }
+}
+// A project that already has the memory bundle keeps its scripts, even on a plain re-run.
+const hasEdukai = fs.existsSync(path.join(edukai, 'index.md'));
+
 // --- tooling ----------------------------------------------------------------
 // The scripts are generated copies, so they are always refreshed; that is the point of
 // --tools-only. A project bootstrapped before the tools became TypeScript has .mjs copies;
@@ -245,6 +290,16 @@ if (opts.scripts) {
       pkg.scripts['okf:mermaid'] = 'node scripts/okf-mermaid.mts okf';
       pkg.scripts['okf:search'] = 'node scripts/okf-search.mts';
       pkg.scripts['okf:mermaid:render'] = build + 'node scripts/okf-view.mts okf --check-render';
+      pkg.scripts['okf:recheck'] = 'node scripts/okf-edukai.mts recheck --bundle okf';
+      if (hasEdukai) {
+        pkg.scripts['edukai:validate'] =
+          'node scripts/okf-view.mts edukai --validate --strict && node scripts/okf-edukai.mts index --check';
+        pkg.scripts['edukai:index'] = 'node scripts/okf-edukai.mts index';
+        pkg.scripts['edukai:recheck'] = 'node scripts/okf-edukai.mts recheck';
+        pkg.scripts['edukai:brief'] = 'node scripts/okf-edukai.mts index && node scripts/okf-edukai-hook.mts brief';
+        pkg.scripts['edukai:search'] = 'node scripts/okf-search.mts --bundle edukai';
+        pkg.scripts['edukai:view'] = 'node scripts/okf-view.mts edukai';
+      }
       if (hasWidgets) {
         pkg.scripts['okf:widgets:build'] = `npm run build -w ${WIDGETS_PKG}`;
         pkg.scripts['okf:widgets:test'] = `npm test -w ${WIDGETS_PKG}`;
@@ -272,7 +327,7 @@ if (opts.scripts) {
         pkg.devDependencies.yaml = '^2.9.1';
       }
       fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
-      console.log('  added the okf: scripts to ' + pkgPath);
+      console.log(`  added the okf: ${hasEdukai ? 'and edukai: ' : ''}scripts to ` + pkgPath);
       if (!hasYaml) console.log('  added the yaml devDependency; run npm install');
     } catch (e) {
       console.warn(
@@ -294,6 +349,9 @@ console.log('  scripts/okf-mermaid.mts    (mermaid parse check via mmdc)        
 console.log('  scripts/okf-search.mts     (ranked, freshness-aware search)       refreshed');
 console.log('  scripts/okf-core.mts       (parsing shared by view and search)    refreshed');
 console.log('  scripts/okf-rank.mts       (the ranking, also run in the viewer)  refreshed');
+console.log('  scripts/okf-edukai.mts     (lessons, pins and re-checks)          refreshed');
+console.log('  scripts/okf-edukai-hook.mts (harness hooks, lesson states)        refreshed');
+if (opts.edukai) console.log('  edukai/                    (the agent memory bundle: lessons are added as agents learn)');
 if (created.length) {
   console.log('\nCreated:');
   for (const f of created) console.log('  ' + f);
@@ -316,6 +374,16 @@ console.log('  npm run okf:view            # validate + write okf/viz.html');
 console.log('  npm run okf:mermaid         # every mermaid block parses (needs mmdc)');
 console.log('  npm run okf:mermaid:render  # every diagram, quiz and widget works in the viewer');
 console.log('  npm run okf:search -- search "query"   # find concepts before reading them');
+console.log('  npm run okf:recheck         # do the files that concepts cite still say what was pinned?');
+if (hasEdukai) {
+  console.log('\nMemory bundle (edukai/):');
+  console.log('  npm run edukai:index        # rebuild the syllabus and the cache the hooks read (run once after a clone)');
+  console.log('  npm run edukai:brief        # what an agent is told when a session opens');
+  console.log('  npm run edukai:recheck      # lessons that need an agent: broken, failed, suspect, stale');
+  console.log('  npm run edukai:validate     # lesson rules, supersede pointers, budgets, a current syllabus');
+  console.log('  npm run edukai:search -- search "query"');
+  console.log('  CI: copy ' + path.join(TEMPLATES, 'edukai-recheck.yml') + ' to .github/workflows/ (not installed for you)');
+}
 if (hasWidgets) {
   console.log('  npm run okf:widgets:typecheck && npm run okf:widgets:test');
 }

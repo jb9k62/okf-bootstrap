@@ -4,12 +4,14 @@
 [![licence: MIT](https://img.shields.io/badge/licence-MIT-blue.svg)](LICENSE)
 ![node >= 24](https://img.shields.io/badge/node-%3E%3D24-339933.svg)
 
-**Design docs your agents write, and your team can actually follow.** An agent skill for
-[pi](https://pi.dev) and [Claude Code](https://claude.com/claude-code) that sets up an
+**Design docs your agents write and your team can actually follow, and a memory your agents
+keep for themselves.** Agent skills for [pi](https://pi.dev) and
+[Claude Code](https://claude.com/claude-code) that set up two
 [OKF](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md)
-(Open Knowledge Format) knowledge bundle in any project: plain markdown next to the code,
-checked like code, and rendered as one self-contained page with a concept graph, diagrams,
-and interactive explainers.
+(Open Knowledge Format) knowledge bundles in any project. `okf/` is for people: plain markdown
+next to the code, checked like code, and rendered as one self-contained page with a concept
+graph, diagrams, and interactive explainers. `edukai/` (opt-in) is for the agent: short,
+sourced lessons that code re-checks, handed back to the agent at the moment they matter.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/viewer-dark.png">
@@ -17,7 +19,7 @@ and interactive explainers.
 </picture>
 
 <sub>The viewer on the [demo bundle](examples/demo/okf): a fictional parcel-tracking service
-with 13 concepts. Every internal link is an edge; the selected concept's neighbours stay lit.</sub>
+with 22 concepts. Every internal link is an edge; the selected concept's neighbours stay lit.</sub>
 
 ## What you get
 
@@ -28,6 +30,7 @@ with 13 concepts. Every internal link is an edge; the selected concept's neighbo
 | **A viewer** | One `viz.html` with no build step: searchable graph with switchable layouts, tree and table views, a neighbourhood focus, colouring by type, trust or freshness, reading pane, Mermaid diagrams with pan and zoom, light and dark themes, deep links |
 | **Quality gates** | Diagrams parsed by the real Mermaid parser, then rendered in headless Chromium, with quizzes and widgets clicked; one exit-code contract (0 pass, 1 broken, 2 could not run) |
 | **Interactive explainers** | Callouts, click-to-check quizzes, and React widgets that let a reader change the inputs and watch the system respond |
+| **Agent memory** (opt-in) | `edukai/`: one-claim lessons pinned to the files they rest on, a re-check that finds the ones that stopped being true, and hooks for Claude Code and pi that tell the agent |
 
 ## Explainers that teach
 
@@ -94,6 +97,34 @@ and a render gate that clicks every widget to prove it responds. See
 [EXPLAINERS.md](skills/okf-bootstrap/references/EXPLAINERS.md) for how to write tours,
 quizzes and widgets that teach.
 
+## Agent memory
+
+An agent starts each session knowing nothing, and what it wrote down last week may no longer
+be true. `--edukai` adds a second bundle, `edukai/`, for what the agent itself has learned. Its
+unit is a **lesson**: one claim, the files it rests on (pinned by a content digest), and where
+the claim is text in a file, a check that code can re-run.
+
+```yaml
+confidence: tested
+sources:
+  - resource: src/poller/retry.ts
+    digest: sha256:b0c1…
+check:
+  - { file: src/poller/retry.ts, contains: "RETRIES = 5" }
+```
+
+`npm run edukai:recheck` derives every lesson's state from the files: a check that no longer
+holds is `failed`, a cited file that is gone is `broken`, a changed file with no check is
+`suspect`. A lesson that stopped being true is superseded by a new one, never edited or
+deleted. Installed as a plugin (Claude Code) or a package (pi), the hooks do three things with
+no one asking: brief the agent when a session opens, name the lessons that cite a file when it
+opens that file, and stop it from finishing with a lesson its own edit just broke. The `edukai`
+skill covers the judgement: what is worth a lesson, and how sure to say you are.
+
+The [memory tour](examples/demo/okf/tours/memory-explainer.md) explains the idea, and the
+[demo walkthrough](examples/demo/README.md) runs it from the command line in two minutes,
+with transcripts from both harnesses.
+
 ## Install
 
 Node 24+ is required: the tools are TypeScript that Node runs directly, with no build step.
@@ -101,7 +132,7 @@ Node 24+ is required: the tools are TypeScript that Node runs directly, with no 
 **pi**, as a package (pin a tag for reproducible installs):
 
 ```bash
-pi install git:github.com/jb9k62/okf-bootstrap@v0.3.0
+pi install git:github.com/jb9k62/okf-bootstrap@v0.4.0
 ```
 
 **Claude Code**, as a plugin from this repo's marketplace:
@@ -125,11 +156,17 @@ git clone https://github.com/jb9k62/okf-bootstrap && cd okf-bootstrap
 npm run install-skill     # ~/.claude/skills and ~/.pi/agent/skills; --claude, --pi, --agents, --copy
 ```
 
+That last way links the two skills only. The memory hooks load when the repository is installed
+as a Claude Code plugin or a pi package (pi 1.0 or later); without them, the snippet `--edukai`
+writes into `AGENTS.md` is what points an agent at its memory. The hooks need Node 22.18 or
+later on the `PATH` they run with (on an older one they stay silent), and say nothing in a
+project with no `edukai/`.
+
 ## Quick start
 
 In the project you want documented, ask your agent:
 
-> Bootstrap an okf for this project, with widgets.
+> Bootstrap an okf for this project, with widgets and the edukai memory bundle.
 
 > Write a guided tour of this change with a quiz, and a widget that shows how the cache
 > expires.
@@ -138,7 +175,7 @@ Or invoke it directly (`/skill:okf-bootstrap` in pi, `/okf-bootstrap` in Claude 
 the scaffold yourself:
 
 ```bash
-node path/to/okf-bootstrap/skills/okf-bootstrap/assets/bootstrap.mts . --name "My App" --widgets
+node path/to/okf-bootstrap/skills/okf-bootstrap/assets/bootstrap.mts . --name "My App" --widgets --edukai
 npm install
 npm install -D @mermaid-js/mermaid-cli@11 playwright && npx playwright install chromium
 
@@ -147,6 +184,9 @@ npm run okf:view            # writes okf/viz.html; open it in a browser
 npm run okf:mermaid         # every diagram parses
 npm run okf:mermaid:render  # every diagram renders, every quiz and widget works
 npm run okf:search -- search "retry policy" --fresh   # ranked, freshness-aware lookup for agents
+
+npm run edukai:index        # with --edukai: the syllabus, and the cache the hooks read
+npm run edukai:recheck      # lessons that need an agent: broken, failed, suspect, stale
 ```
 
 Re-running the scaffold is safe: it keeps everything you wrote and refreshes only the tools.
@@ -161,9 +201,15 @@ your-project/
 │   ├── adr/                  # decision records: readme, template, 0001-...
 │   ├── design/               # working design notes
 │   └── <your-app>/           # concepts: overview, architecture, data model, API, tours
+├── edukai/                   # with --edukai: the agent memory bundle
+│   ├── index.md              # the syllabus; one generated block
+│   ├── log.md
+│   └── <domain>/             # overview.md, and lessons/YYYY-MM-DD-short-claim.md
 ├── scripts/
 │   ├── okf-view.mts          # validator + viewer + render gate
-│   └── okf-mermaid.mts       # Mermaid parse gate
+│   ├── okf-mermaid.mts       # Mermaid parse gate
+│   ├── okf-search.mts        # ranked search, on either bundle
+│   └── okf-edukai.mts        # lessons: new, verify, supersede, index, recheck
 ├── packages/okf-widgets/     # with --widgets: your React widgets (an npm workspace)
 ├── okf-concept-template.md   # authoring aids, outside the bundle
 └── okf-explainer-template.md
@@ -192,7 +238,10 @@ review checklist; [SKILL.md](skills/okf-bootstrap/SKILL.md) is what the agents r
 git clone https://github.com/jb9k62/okf-bootstrap && cd okf-bootstrap
 npm install
 npm run demo                # builds the widgets, writes examples/demo/okf/viz.html
+npm run demo:edukai         # the memory bundle: the session brief, then the re-check report
 ```
+
+[examples/demo/README.md](examples/demo/README.md) walks through the memory bundle.
 
 ## Development
 
@@ -230,8 +279,9 @@ npm run spec -- update      # move the pin, re-vendor, print a migration checkli
 ## Releases
 
 Versions are git tags; see [CHANGELOG.md](CHANGELOG.md). To release, bump `version` in
-`package.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and `VERSION`
-in `assets/bootstrap.mts` (the tests check they agree), add a changelog entry, then tag.
+`package.json` (and `package-lock.json`), `.claude-plugin/plugin.json`,
+`.claude-plugin/marketplace.json` and `VERSION` in `assets/bootstrap.mts` (the tests check they
+agree), and the tag in the pi install line above, add a changelog entry, then tag.
 
 ## Licence
 

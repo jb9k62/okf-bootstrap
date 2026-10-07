@@ -19,7 +19,7 @@ Scaffolds the **app-knowledge** flavour of an [OKF](references/okf-spec/SPEC.md)
 a project and keeps it honest: an `okf/` bundle (index, dated log, ADR area, `design/` and
 `<slug>/` concept dirs), the `okf-view.mts` validator + graph viewer, the `okf-mermaid.mts`
 parse checker, the `okf-search.mts` freshness-aware search, the `okf:` npm scripts, and optionally `packages/okf-widgets` for interactive
-explainers. It models knowledge *about* a project: decisions, architecture, domain model, API,
+explainers and `edukai/`, a second bundle for what agents learn (see "Two bundles"). It models knowledge *about* a project: decisions, architecture, domain model, API,
 and the guided tours that make them understandable.
 
 Read these as the task needs them (paths relative to this file):
@@ -49,7 +49,8 @@ node <skill dir>/assets/bootstrap.mts <targetDir> --name "Project Name" [--widge
 | `--name` | Title for `okf/index.md` (default: the target's folder name) |
 | `--slug` | Concept dir id (default: kebab-case of the name) |
 | `--widgets` | Also scaffold `packages/okf-widgets` (React micro-worlds), add it to the npm workspaces, and build it before `okf:view` and the render gate |
-| `--tools-only` | Refresh `scripts/okf-*.mts` and the `okf:` scripts only; add `--widgets` to add widgets to an existing bundle |
+| `--edukai` | Also scaffold `edukai/`, the agent memory bundle (see "Two bundles"), add the `edukai:` scripts, and write a short marked snippet into `AGENTS.md` once |
+| `--tools-only` | Refresh `scripts/okf-*.mts` and the `okf:` scripts only; add `--widgets` to add widgets, or `--edukai` to add the memory bundle, to a project that already has `okf/` |
 | `--no-scripts` | Leave `package.json` alone |
 | `--force` | Replace the authored files (index, log, ADR index and template, authoring templates) with fresh templates. Never touches `packages/okf-widgets` |
 
@@ -92,6 +93,25 @@ refreshed, and older `.mjs` copies are removed.
    look, in light and dark: the gates prove it works, not that it reads well.
 5. **Commit** `okf/`, `scripts/`, `packages/okf-widgets/`, the two authoring templates and
    `package.json`. Gitignore `okf/viz.html` (generated).
+
+## Two bundles
+
+The scaffold can set up two OKF bundles. They stay separate because they have different
+readers and different rules.
+
+| | Design bundle, `okf/` | Memory bundle, `edukai/` (with `--edukai`) |
+| --- | --- | --- |
+| Reader | The team, in `viz.html` | The agent, through harness hooks |
+| Unit | A concept: one topic, many claims | A lesson: one claim, with the files it rests on |
+| Written | When the design changes | Whenever an agent learns something |
+| Trust aim | Reviewed by a person | Confirmed by a script or an agent |
+
+This skill covers the design bundle. Reading and writing lessons is the **`edukai` skill**
+(installed beside this one); use it for anything under `edukai/`. Never put lessons in `okf/`,
+or design docs in `edukai/`. Two things from the memory side also work on a design bundle:
+`supersedes` / `superseded_by` in frontmatter (an ADR that replaces another; the validator
+checks the pair), and `npm run okf:recheck`, which reports concepts whose pinned `sources`
+changed (`node scripts/okf-edukai.mts verify <concept> --bundle okf --by <actor>` pins them).
 
 ## Finding things in a bundle
 

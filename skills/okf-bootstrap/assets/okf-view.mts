@@ -46,6 +46,7 @@ import {
   trustTier,
 } from './okf-core.mts';
 import type { Evidence, Frontmatter } from './okf-core.mts';
+import { checkProblem, CONFIDENCES } from './okf-edukai-hook.mts';
 
 interface Issue {
   file: string;
@@ -61,6 +62,7 @@ interface Concept {
   resource: string;
   tags: string[];
   status: string;
+  confidence: string;
   generated: object;
   verified: Evidence[];
   stale_after: string;
@@ -164,6 +166,7 @@ function walkBundle(
   const issues: Issue[] = [];
   const reserved: string[] = [];
   const reservedLinks: Array<{ file: string; links_to: string[] }> = [];
+  const pointers: Pointers[] = [];
   const files = listMarkdown(bundleRoot);
   for (const rel of files) {
     const full = path.join(bundleRoot, rel);
@@ -216,6 +219,14 @@ function walkBundle(
       });
     }
 
+    issues.push(...lessonIssues(rel, fm, doc.body));
+    pointers.push({
+      file: rel,
+      status: String(fm.status ?? 'stable').toLowerCase(),
+      supersedes: fm.supersedes,
+      superseded_by: fm.superseded_by,
+    });
+
     const tags = Array.isArray(fm.tags)
       ? fm.tags.map(String)
       : fm.tags
@@ -234,6 +245,7 @@ function walkBundle(
       resource: String(fm.resource ?? ''),
       tags,
       status: String(fm.status ?? 'stable'),
+      confidence: String(fm.type) === 'Lesson' ? String(fm.confidence ?? '') : '',
       generated:
         fm.generated && typeof fm.generated === 'object' ? fm.generated : {},
       verified: normalizeVerified(fm),
@@ -252,7 +264,139 @@ function walkBundle(
     });
   }
   issues.push(...danglingLinkIssues(files, concepts, reservedLinks));
+  issues.push(...supersedeIssues(pointers));
+  // A lesson source that starts with "/" is read from the bundle root, so it must be there.
+  const present = new Set(files);
+  for (const c of concepts) {
+    if (c.type !== 'Lesson') continue;
+    c.sources.forEach((s, i) => {
+      const resource = (s as Record<string, unknown>).resource;
+      if (typeof resource !== 'string' || !resource.startsWith('/') || present.has(resource.replace(/^\/+/, ''))) return;
+      issues.push({
+        file: c.id + '.md',
+        kind: 'lesson',
+        message: `sources[${i}].resource: ${resource} is not a file in the bundle (a path that starts with / is read from the bundle root; name a project file from the project root)`,
+      });
+    });
+  }
   return { concepts, issues, reserved };
+}
+
+// --- lessons, overviews and supersede pointers ------------------------------------
+// The memory bundle (edukai/) is an OKF bundle of lessons: one claim each, with the files it
+// rests on. These rules apply to any bundle, so a design bundle can use the supersede
+// pointers on its decision records too.
+
+const LESSON_BODY_LINES = 30;
+const OVERVIEW_BODY_LINES = 60;
+const DIGEST_RE = /^sha256:[0-9a-f]{16}$/;
+
+/** Body lines, not counting blank lines at either end. */
+function bodyLines(body: string): number {
+  const lines = body.split(/\r?\n/);
+  let start = 0;
+  let end = lines.length;
+  while (start < end && lines[start]!.trim() === '') start++;
+  while (end > start && lines[end - 1]!.trim() === '') end--;
+  return end - start;
+}
+
+function lessonIssues(file: string, fm: Frontmatter, body: string): Issue[] {
+  const type = String(fm.type);
+  const out: Issue[] = [];
+  if (type === 'Overview' && bodyLines(body) > OVERVIEW_BODY_LINES) {
+    out.push({ file, kind: 'budget', message: `An Overview body is at most ${OVERVIEW_BODY_LINES} lines; this one has ${bodyLines(body)}` });
+  }
+  if (type !== 'Lesson') return out;
+  const lesson = (message: string) => out.push({ file, kind: 'lesson', message });
+  const text = (v: unknown) => typeof v === 'string' && v.trim() !== '';
+
+  if (bodyLines(body) > LESSON_BODY_LINES) {
+    out.push({ file, kind: 'budget', message: `A Lesson body is at most ${LESSON_BODY_LINES} lines; this one has ${bodyLines(body)}. One lesson, one claim: split it` });
+  }
+  for (const key of ['title', 'description']) if (!text(fm[key])) lesson(`A Lesson needs a \`${key}\``);
+  const confidence = fm.confidence;
+  if (confidence == null) lesson('A Lesson needs `confidence`: ' + CONFIDENCES.join(', '));
+  else if (!CONFIDENCES.includes(String(confidence))) lesson(`confidence: ${String(confidence)} is not ${CONFIDENCES.join(', ')}`);
+  const generated = fm.generated as Evidence | undefined;
+  if (!generated || typeof generated !== 'object' || !text(generated.by) || generated.at == null) {
+    lesson('A Lesson needs `generated: { by, at }`');
+  }
+  const verified = normalizeVerified(fm);
+  if (confidence === 'inferred' && verified.length) {
+    lesson('confidence: inferred, but it has a `verified` entry; a checked lesson is tested or observed');
+  }
+  if (confidence !== 'inferred' && confidence != null && verified.length === 0) {
+    lesson(`confidence: ${String(confidence)} needs a \`verified\` entry (run okf-edukai verify), or it is inferred`);
+  }
+  if (verified.length && fm.stale_after == null) lesson('`verified` without `stale_after` (okf-edukai verify sets both)');
+  const sources = Array.isArray(fm.sources) ? fm.sources : [];
+  if (sources.length === 0) lesson('A Lesson needs at least one entry in `sources`');
+  sources.forEach((s: unknown, i: number) => {
+    const entry = s && typeof s === 'object' ? (s as Record<string, unknown>) : {};
+    if (!text(entry.resource)) lesson(`sources[${i}] has no \`resource\``);
+    if (entry.digest != null && !DIGEST_RE.test(String(entry.digest))) {
+      lesson(`sources[${i}].digest is not one okf-edukai wrote; never write it by hand`);
+    }
+  });
+  if (String(fm.status ?? '').toLowerCase() === 'deprecated' && fm.superseded_by == null) {
+    lesson('status: deprecated without `superseded_by`; a lesson is retired by superseding it (okf-edukai supersede)');
+  }
+  if (fm.check != null && !Array.isArray(fm.check)) lesson('`check` must be a list');
+  (Array.isArray(fm.check) ? fm.check : []).forEach((c: unknown, i: number) => {
+    const problem = checkProblem(c);
+    if (problem) lesson(`check[${i}] ${problem}`);
+  });
+  return out;
+}
+
+interface Pointers {
+  file: string;
+  status: string;
+  supersedes: unknown;
+  superseded_by: unknown;
+}
+
+/** Supersede, never delete: the old and the new concept must name each other. */
+function supersedeIssues(all: Pointers[]): Issue[] {
+  const out: Issue[] = [];
+  const byFile = new Map(all.map((p) => [p.file, p]));
+  const issue = (file: string, message: string) => out.push({ file, kind: 'supersede', message });
+  /** The pointer as a bundle-relative file, or null (after reporting it) when it is not one. */
+  const target = (p: Pointers, key: 'supersedes' | 'superseded_by'): Pointers | null => {
+    const raw = p[key];
+    if (raw == null) return null;
+    if (typeof raw !== 'string' || !raw.startsWith('/') || !raw.endsWith('.md')) {
+      issue(p.file, `${key}: ${String(raw)} is not a bundle-root path ending .md, such as /adr/0002-short-title.md`);
+      return null;
+    }
+    const hit = byFile.get(raw.replace(/^\/+/, ''));
+    if (!hit) issue(p.file, `${key}: ${raw} is not a concept in the bundle`);
+    return hit ?? null;
+  };
+  for (const p of all) {
+    const newer = target(p, 'superseded_by');
+    if (p.superseded_by != null && p.status !== 'deprecated') {
+      issue(p.file, 'It has `superseded_by`, so it needs `status: deprecated`');
+    }
+    if (newer && newer.supersedes !== `/${p.file}`) {
+      issue(p.file, `superseded_by names /${newer.file}, which does not name this file in \`supersedes\``);
+    }
+    const older = target(p, 'supersedes');
+    if (older && older.superseded_by !== `/${p.file}`) {
+      issue(p.file, `supersedes names /${older.file}, which does not name this file in \`superseded_by\``);
+    }
+    // A chain of replacements that returns to where it started has no current lesson.
+    const seen = new Set([p.file]);
+    for (let at = newer; at; at = byFile.get(String(at.superseded_by ?? '').replace(/^\/+/, '')) ?? null) {
+      if (seen.has(at.file)) {
+        issue(p.file, `The superseded_by chain from here returns to /${at.file}: a cycle`);
+        break;
+      }
+      seen.add(at.file);
+    }
+  }
+  return out;
 }
 
 /**
@@ -492,6 +636,9 @@ const TYPE_PALETTE: Record<string, string> = {
   // ones grey; a guided tour is distinct enough from the reference concepts to
   // earn its own colour in the graph.
   Explainer: '#0d9488',
+  // The memory bundle's two types (edukai/): one claim an agent learned, and a domain's summary.
+  Lesson: '#4f46e5',
+  Overview: '#be185d',
   Architecture: '#0891b2',
   'API Reference': '#7c3aed',
   'Data Model': '#d97706',
@@ -3346,9 +3493,9 @@ async function checkRender(outPath: string): Promise<number> {
   }
 }
 
-function countBy(concepts: Concept[], key: 'trust_tier' | 'status'): string {
+function countBy(concepts: Concept[], key: 'trust_tier' | 'status' | 'confidence'): string {
   const counts: Record<string, number> = {};
-  for (const c of concepts) counts[c[key]] = (counts[c[key]] || 0) + 1;
+  for (const c of concepts) counts[c[key] || 'none'] = (counts[c[key] || 'none'] || 0) + 1;
   return Object.entries(counts)
     .map(([k, v]) => `${k}=${v}`)
     .join(', ');
@@ -3398,6 +3545,8 @@ async function main() {
   }
   console.log(`  trust tiers: ${countBy(concepts, 'trust_tier')}`);
   console.log(`  statuses   : ${countBy(concepts, 'status')}`);
+  const lessons = concepts.filter((c) => c.type === 'Lesson');
+  if (lessons.length) console.log(`  confidence : ${countBy(lessons, 'confidence')}  (${lessons.length} lessons)`);
 
   if (!opts.validateOnly) {
     const widgetsFile = opts.widgets

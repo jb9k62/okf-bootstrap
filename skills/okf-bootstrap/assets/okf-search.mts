@@ -28,6 +28,7 @@
  *   --type <t>         concept type, case-insensitive
  *   --status <s>       draft | stable | deprecated
  *   --trust <list>     human, machine, unverified (comma-separated, exact tiers)
+ *   --confidence <c>   a lesson's confidence: tested | observed | inferred
  *   --fresh | --stale  not stale / stale (a concept without `stale_after` never expires)
  *   --expires-within 14d   stale_after falls in the next 14 days (units: h, d, w)
  *   --linked-from <id> concepts that <id> links to
@@ -135,6 +136,7 @@ interface Options {
   type: string | null;
   status: string | null;
   trust: string[] | null;
+  confidence: string | null;
   freshness: 'fresh' | 'stale' | null;
   expiresWithin: number | null;
   linkedFrom: string | null;
@@ -177,6 +179,8 @@ function indexFile(rel: string, bundleRoot: string, text: string): Entry {
     generated_at: String((generated as Record<string, unknown>).at ?? ''),
     verified_at: latest(normalizeVerified(fm).map((v) => v.at)),
     links_to: extractLinks(body, path.dirname(path.join(bundleRoot, rel)), bundleRoot),
+    ...(fm.confidence == null ? {} : { confidence: String(fm.confidence).toLowerCase() }),
+    ...(typeof fm.superseded_by === 'string' ? { superseded_by: fm.superseded_by } : {}),
   };
   return buildEntry(meta, body);
 }
@@ -301,6 +305,7 @@ function filtersOf(o: Options, idx: Index): Filters {
     type: o.type,
     status: o.status,
     trust: o.trust,
+    confidence: o.confidence,
     freshness: o.freshness,
     expiresWithin: o.expiresWithin,
     linkedFrom: o.linkedFrom ? resolveId(idx, o.linkedFrom) : null,
@@ -350,10 +355,20 @@ function summary(e: Entry, o: Options) {
     days: f.days,
     verified_at: e.verified_at || null,
     generated_at: e.generated_at || null,
+    ...(e.confidence ? { confidence: e.confidence } : {}),
+    ...(e.superseded_by ? { superseded_by: e.superseded_by } : {}),
   };
 }
 
-const badge = (e: Entry, o: Options) => [e.type, e.trust, freshnessLabel(freshness(e, o.now)), ...(e.status === 'stable' ? [] : [e.status])].join(' · ');
+const badge = (e: Entry, o: Options) =>
+  [
+    e.type,
+    ...(e.confidence ? [e.confidence] : []),
+    e.trust,
+    freshnessLabel(freshness(e, o.now)),
+    ...(e.status === 'stable' ? [] : [e.status]),
+    ...(e.superseded_by ? [`replaced by ${e.superseded_by.replace(/^\/+/, '').replace(/\.md$/, '')}`] : []),
+  ].join(' · ');
 
 function print(o: Options, data: unknown, text: () => string): void {
   console.log(o.json ? JSON.stringify(data, null, 2) : text());
@@ -509,7 +524,7 @@ function cmdStale(idx: Index, o: Options): void {
 // --- arguments --------------------------------------------------------------
 
 const VALUE_FLAGS = new Set([
-  'bundle', 'limit', 'tag', 'type', 'status', 'trust', 'now', 'section', 'expires-within', 'linked-from', 'links-to',
+  'bundle', 'limit', 'tag', 'type', 'status', 'trust', 'confidence', 'now', 'section', 'expires-within', 'linked-from', 'links-to',
 ]);
 const BOOL_FLAGS = new Set(['json', 'explain', 'outline', 'fresh', 'stale', 'all', 'no-cache', 'strict', 'help']);
 
@@ -565,6 +580,10 @@ function parseArgs(argv: string[]): Options {
         return full;
       })
     : null;
+  const confidence = one('confidence')?.toLowerCase() ?? null;
+  if (confidence !== null && !['tested', 'observed', 'inferred'].includes(confidence)) {
+    throw new UsageError(`--confidence: "${one('confidence')}" is not tested, observed or inferred`);
+  }
   return {
     command: command === 'tags' ? 'facets' : command,
     args: rest.slice(1),
@@ -582,6 +601,7 @@ function parseArgs(argv: string[]): Options {
     type: one('type'),
     status: one('status'),
     trust,
+    confidence,
     freshness: has('fresh') ? 'fresh' : has('stale') ? 'stale' : null,
     expiresWithin: one('expires-within') === null ? null : parseDuration(one('expires-within')!),
     linkedFrom: one('linked-from'),

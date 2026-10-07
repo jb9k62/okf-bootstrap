@@ -90,6 +90,16 @@ describe('viewer views', { timeout: 120_000 }, () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  // Opening a concept from a list sets location.hash, and the viewer shows it on the
+  // `hashchange` that follows. Wait for that, or it can land in the middle of the next test
+  // and replace the concept that test opened.
+  const hashShown = () =>
+    page.waitForFunction(() => {
+      const id = decodeURIComponent(location.hash.slice(1));
+      const node = (window.BUNDLE as unknown as { nodes: Array<{ data: { id: string; label: string } }> }).nodes.find((n) => n.data.id === id);
+      return !!node && document.title.startsWith(node.data.label + ' | ');
+    });
+
   // Skips, rather than fails, when the environment has no usable browser.
   const view = (name: string, fn: () => Promise<void>) =>
     it(name, async (t) => {
@@ -219,6 +229,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.locator('#concept-table tbody tr').nth(1).click();
     assert.equal(await page.evaluate('document.body.dataset.view'), 'tree', 'returns to the view it came from');
     assert.notEqual(await page.evaluate('location.hash'), '');
+    await hashShown();
     await page.click('[data-view=graph]');
   });
 
@@ -227,6 +238,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.locator('#concept-table tbody tr').nth(3).focus();
     await page.keyboard.press('Enter');
     assert.equal(await page.evaluate('document.body.dataset.view'), 'graph');
+    await hashShown();
   });
 
   view('neighbourhood shows only the open concept and its neighbours, then restores the graph', async () => {

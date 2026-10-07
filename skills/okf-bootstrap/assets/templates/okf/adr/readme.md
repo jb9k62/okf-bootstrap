@@ -28,5 +28,9 @@ Architecture Decisions*.
 - Keep it to about a page, written for a reader who doesn't share your context.
 - Record choices that are costly to reverse or likely to be questioned (stack, module
   boundaries, data model, API contract), not every small one.
-- Statuses: **proposed**, **accepted**, **superseded** (link the replacement), or
-  **deprecated**. Update the status instead of rewriting history.
+- Statuses: **proposed**, **accepted**, **superseded** or **deprecated**. Update the status
+  instead of rewriting history.
+- To supersede a record, write the new one and point the two at each other in their
+  frontmatter: `supersedes: /adr/NNNN-old.md` on the new record, and `status: deprecated` with
+  `superseded_by: /adr/NNNN-new.md` on the old. `npm run okf:validate` reports a pair that does
+  not match, and the search flags the old record as replaced.

@@ -1,0 +1,38 @@
+# Re-check what the knowledge bundles claim against the code they cite.
+#
+# Copy to .github/workflows/edukai-recheck.yml. On a pull request it fails when a concept's
+# check no longer holds, a pinned source is gone, or a pinned source changed with no check to
+# vouch for it. The weekly run only reports. It never writes to the repository: a lesson is
+# fixed by an agent or a person, in a normal commit.
+#
+# `stale` and `unverified` never fail a build: a pull request must not go red because time passed.
+name: edukai-recheck
+
+on:
+  pull_request:
+  schedule:
+    - cron: '0 7 * * 1' # weekly, report only
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  recheck:
+    runs-on: ubuntu-latest
+    env:
+      STRICT: ${{ github.event_name == 'pull_request' && '--strict' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Design bundle (okf/)
+        run: node scripts/okf-edukai.mts recheck --bundle okf $STRICT | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -eo pipefail {0}
+      - name: Memory bundle (edukai/)
+        if: ${{ !cancelled() && hashFiles('edukai/index.md') != '' }}
+        run: node scripts/okf-edukai.mts recheck $STRICT | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -eo pipefail {0}

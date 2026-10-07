@@ -27,6 +27,9 @@ Paths are relative to the skill directory.
 | `assets/okf-search.mts` | Ranked search over the bundle that understands trust tier, staleness, tags and links; see "Finding concepts". |
 | `assets/okf-core.mts` | Parsing shared by the viewer and search: frontmatter, trust tier, staleness, links. |
 | `assets/okf-rank.mts` | The ranking itself: pure, with no imports. `okf-search` runs it, and the viewer inlines it (types stripped) for its search box. |
+| `assets/okf-edukai.mts` | The memory bundle's tool (`new`, `verify`, `supersede`, `index`, `recheck`); `verify` and `recheck` also work on a design bundle with `--bundle okf`. |
+| `assets/okf-edukai-hook.mts` | What the harness hooks run (`brief`, `cites`, `debt`) and the lesson-state rules; no dependencies. The validator imports its `check` rules. |
+| `assets/templates/edukai/`, `assets/templates/edukai-recheck.yml` | The memory bundle's `index.md` and `log.md` (scaffolded by `--edukai`), and a CI workflow to copy by hand. |
 | `assets/templates/okf/` | `index.md`, `log.md` (reserved), `adr/readme.md`, `adr/template.md`. |
 | `assets/templates/concept.md` | Ready-to-fill reference concept (scaffolded as `okf-concept-template.md`). |
 | `assets/templates/explainer.md` | Ready-to-fill guided tour (scaffolded as `okf-explainer-template.md`). |
@@ -51,10 +54,11 @@ This creates:
 - `okf/index.md`, `okf/log.md`
 - `okf/adr/readme.md`, `okf/adr/template.md`
 - `okf/design/` and `okf/<slug>/` (blank, with `.gitkeep`)
-- `scripts/okf-view.mts` (the validator + viewer), `scripts/okf-mermaid.mts` (the Mermaid parse checker), `scripts/okf-search.mts` (search), `scripts/okf-core.mts` (parsing) and `scripts/okf-rank.mts` (the ranking; also run by the viewer's search box)
+- `scripts/okf-view.mts` (the validator + viewer), `scripts/okf-mermaid.mts` (the Mermaid parse checker), `scripts/okf-search.mts` (search), `scripts/okf-core.mts` (parsing), `scripts/okf-rank.mts` (the ranking; also run by the viewer's search box), and `scripts/okf-edukai.mts` with `scripts/okf-edukai-hook.mts` (pins and re-checks; the memory bundle's tool)
 - `okf-concept-template.md` and `okf-explainer-template.md` (authoring aids, kept *outside* the bundle so they are not scanned)
 - with `--widgets`: `packages/okf-widgets/`, added to the npm `workspaces`
-- adds `okf:validate`, `okf:fix`, `okf:view`, `okf:mermaid`, `okf:mermaid:render`, `okf:search` (and with widgets,
+- with `--edukai`: `edukai/index.md` and `edukai/log.md`, the `edukai:` scripts, and a marked snippet in `AGENTS.md`
+- adds `okf:validate`, `okf:fix`, `okf:view`, `okf:mermaid`, `okf:mermaid:render`, `okf:search`, `okf:recheck` (and with widgets,
   `okf:widgets:build`, `okf:widgets:test`, `okf:widgets:typecheck`) to `package.json`, plus
   `yaml` as a devDependency
 
@@ -73,7 +77,7 @@ npm run okf:mermaid:render  # every diagram, quiz and widget works (headless Chr
 Re-running the scaffold is safe: `okf/index.md`, `okf/log.md`, the ADR index and template, and
 the two authoring templates are kept if they exist (the run lists what it kept), and only
 `--force` replaces them. `packages/okf-widgets` is never replaced, not even by `--force`: it is
-the project's code once scaffolded. The two `scripts/` tools are generated copies and are
+the project's code once scaffolded. The `scripts/okf-*.mts` tools are generated copies and are
 always refreshed (and old `.mjs` copies removed), so `--tools-only` is the way to pull newer
 tooling into a project whose bundle is already written.
 
@@ -258,6 +262,31 @@ The workflow for an agent: `facets` to learn the vocabulary, `search` with filte
 date. A cache under `node_modules/.cache/okf-search/` (or the OS temp dir) is keyed by each
 file's mtime and size, re-checked on every run; `--no-cache` skips it. Files it cannot index
 (bad frontmatter, no `type`) are named on stderr; `--strict` makes that exit 1.
+
+### Two bundles: design (`okf/`) and memory (`edukai/`)
+
+`bootstrap.mts --edukai` (or `--tools-only --edukai` later) adds a second OKF bundle,
+`edukai/`: what agents have learned, as **lessons** (`type: Lesson`, one claim each, in
+`<domain>/lessons/YYYY-MM-DD-short-claim.md`) and one `type: Overview` per domain. It is
+written by agents for agents, and its rules are in the separate `edukai` skill. Keep the two
+apart: how the system is designed, for people, goes in `okf/`; a fact an agent found out, for
+the next agent, goes in `edukai/`.
+
+What the design bundle shares with it:
+
+- **Supersede pointers.** When one concept replaces another (an ADR, most often), the new one
+  gets `supersedes: /adr/0002-old.md`, and the old one `status: deprecated` and
+  `superseded_by: /adr/0007-new.md`. Both are bundle-root paths ending `.md`.
+  `okf:validate` reports a `supersede` issue when the two do not name each other, the old one
+  is not deprecated, a target is missing, or the chain loops. Search flags the old concept as
+  replaced. Never delete the old concept.
+- **`okf:recheck`.** `node scripts/okf-edukai.mts verify <concept> --bundle okf --by human:<id>`
+  pins a digest of each file in the concept's `sources` and sets `verified` and `stale_after`.
+  After that, `npm run okf:recheck` lists the concept as `suspect` when a pinned file changes
+  and `broken` when one disappears (`-- --strict` exits 1 on those, never on `stale`). Only
+  pin what a person has reviewed: `verify` writes a `verified` entry.
+- **The validator** reads both bundles: `lesson`, `supersede` and `budget` issues apply to any
+  bundle that uses those types or keys.
 
 ### Mermaid (two gates)
 

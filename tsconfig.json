@@ -16,5 +16,5 @@
     "rewriteRelativeImportExtensions": true,
     "skipLibCheck": true
   },
-  "include": ["skills/okf-bootstrap/assets/*.mts", "scripts/*.mts", "test/*.mts"]
+  "include": ["skills/okf-bootstrap/assets/*.mts", "scripts/*.mts", "test/*.mts", "extensions/*.ts"]
 }

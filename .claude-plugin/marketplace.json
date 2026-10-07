@@ -8,8 +8,8 @@
     {
       "name": "okf-bootstrap",
       "source": "./",
-      "description": "Scaffold an OKF knowledge bundle into a project: validator, graph viewer, Mermaid gates, and interactive widgets and quizzes for explainers.",
-      "version": "0.3.0"
+      "description": "Scaffold an OKF knowledge bundle into a project: validator, graph viewer, Mermaid gates, and interactive widgets and quizzes for explainers. Optionally an agent memory bundle (edukai) with hooks.",
+      "version": "0.4.0"
     }
   ]
 }

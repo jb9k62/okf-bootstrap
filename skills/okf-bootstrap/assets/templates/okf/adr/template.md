@@ -9,9 +9,14 @@ generated: { by: okf-bootstrap/{{VERSION}}, at: {{NOW}} }
 # ADR-NNNN: Short, action-oriented title
 
 Copy to `/adr/NNNN-short-title.md`, set the frontmatter `type` to `Architectural Decision`, add
-it to [Decision records](/adr/readme.md), and delete this paragraph.
+it to [Decision records](/adr/readme.md), and delete this paragraph and the next.
 
-- **Status:** proposed | accepted | superseded by ADR-NNNN | deprecated
+When this record replaces an earlier one, say so in the frontmatter of both, not in prose:
+`supersedes: /adr/NNNN-old-title.md` here, and `status: deprecated` with
+`superseded_by: /adr/NNNN-this-title.md` on the old one. `npm run okf:validate` checks that
+the two name each other.
+
+- **Status:** proposed | accepted | deprecated
 - **Date:** YYYY-MM-DD
 - **Deciders:** who made the call
 

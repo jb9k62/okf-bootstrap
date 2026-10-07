@@ -48,6 +48,8 @@ describe('bootstrap', () => {
       'scripts/okf-search.mts',
       'scripts/okf-core.mts',
       'scripts/okf-rank.mts',
+      'scripts/okf-edukai.mts',
+      'scripts/okf-edukai-hook.mts',
       'okf-concept-template.md',
       'okf-explainer-template.md',
     ]) {

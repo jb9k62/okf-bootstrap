@@ -1,0 +1,9 @@
+# Parcel tracker's CI. Inert in this repository: GitHub reads workflows from the repo root only.
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: btest run --shard auto

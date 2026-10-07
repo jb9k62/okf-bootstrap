@@ -56,6 +56,10 @@ export interface EntryMeta {
   generated_at: string;
   verified_at: string;
   links_to: string[];
+  /** A lesson's `confidence` (tested, observed, inferred); absent on other concepts. */
+  confidence?: string;
+  /** The bundle-root path of the concept that replaced this one, when there is one. */
+  superseded_by?: string;
 }
 
 export interface Entry extends EntryMeta {
@@ -221,6 +225,8 @@ export interface Filters {
   linkedFrom: EntryMeta | null;
   /** Only concepts that link to this one. */
   linksTo: EntryMeta | null;
+  /** Only lessons with this confidence. */
+  confidence?: string | null;
 }
 
 export const NO_FILTERS: Filters = {
@@ -236,7 +242,7 @@ export const NO_FILTERS: Filters = {
 
 export function hasFilters(f: Filters): boolean {
   return Boolean(
-    f.tags.length || f.type || f.status || f.trust || f.freshness || f.expiresWithin !== null || f.linkedFrom || f.linksTo,
+    f.tags.length || f.type || f.status || f.trust || f.freshness || f.expiresWithin !== null || f.linkedFrom || f.linksTo || f.confidence,
   );
 }
 
@@ -244,6 +250,7 @@ export function matchesFilters(e: EntryMeta, f: Filters, now: Date): boolean {
   if (f.type && e.type.toLowerCase() !== f.type.toLowerCase()) return false;
   if (f.status && e.status !== f.status.toLowerCase()) return false;
   if (f.trust && !f.trust.includes(e.trust)) return false;
+  if (f.confidence && (e.confidence ?? '') !== f.confidence.toLowerCase()) return false;
   if (f.tags.length) {
     const have = new Set(e.tags.map((t) => t.toLowerCase()));
     if (!f.tags.every((t) => have.has(t.toLowerCase()))) return false;

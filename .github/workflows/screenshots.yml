@@ -1,18 +1,26 @@
 name: screenshots
 
 # Regenerates the README images (docs/images) from the demo bundle, and commits them when they
-# changed. Runs by hand, and on main whenever something that shows up in them changes.
+# changed. Runs by hand, and on main when the viewer (or code underneath it), the widgets, the
+# demo bundle or the screenshot tool itself changes.
 on:
   workflow_dispatch:
   push:
     branches: [main]
     paths:
+      # The viewer and everything it imports (okf-core -> okf-rank, okf-edukai-hook -> okf-rank).
       - skills/okf-bootstrap/assets/okf-view.mts
       - skills/okf-bootstrap/assets/okf-core.mts
       - skills/okf-bootstrap/assets/okf-rank.mts
-      - skills/okf-bootstrap/assets/templates/okf-widgets/src/**
+      - skills/okf-bootstrap/assets/okf-edukai-hook.mts
+      # The widget bundle inlined into the viewer and built by the screenshots script.
+      - skills/okf-bootstrap/assets/templates/okf-widgets/**
+      # The bundle the shots are taken from, and the tool that takes them.
       - examples/demo/**
       - scripts/screenshots.mts
+      # Build and dependency inputs for both of the above.
+      - package.json
+      - package-lock.json
       - .github/workflows/screenshots.yml
 
 permissions:

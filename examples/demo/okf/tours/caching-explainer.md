@@ -4,6 +4,8 @@ title: "Guided tour: what should a cache keep?"
 description: "Why a bigger cache is not always a better one, and why the eviction rule has to match the traffic. A widget runs four policies on the same requests. Closes with a quiz."
 tags: [explainer, guided-tour, caching, performance]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+cast: [Amira, Sam, Lee]
+cast_source: ../cast.json
 ---
 
 This tour is for anyone about to put a cache in front of a lookup. After it, you will know how

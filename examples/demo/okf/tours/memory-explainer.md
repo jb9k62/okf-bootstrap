@@ -4,6 +4,8 @@ title: "Guided tour: what does the agent remember?"
 description: "How an agent's lessons about the code are kept, how code notices when one stops being true, and who is told. Closes with a quiz."
 tags: [explainer, guided-tour, memory, agents]
 generated: { by: example-agent/1.0, at: 2026-10-07T09:00:00Z }
+cast: [Sam, Noor, Dana]
+cast_source: ../cast.json
 ---
 
 This tour is for anyone who works beside a coding agent, or reviews what one wrote. After it,

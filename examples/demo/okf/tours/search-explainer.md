@@ -4,6 +4,8 @@ title: "Guided tour: how many looks does it take?"
 description: "Why binary search needs a logarithm of the work that linear search does, and why it quietly gives the wrong answer on a list that is not sorted. A widget steps through each comparison. Closes with a quiz."
 tags: [explainer, guided-tour, algorithms, searching]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+cast: [Amira, Sam, Lee]
+cast_source: ../cast.json
 ---
 
 This tour is for anyone who looks things up in a list. After it, you will know why binary

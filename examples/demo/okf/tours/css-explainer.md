@@ -4,6 +4,8 @@ title: "Guided tour: why is the badge the wrong colour?"
 description: "How the cascade chooses between CSS rules that all match one element: importance, inline styles, layers, specificity and source order, with a widget that ranks them. Closes with a quiz."
 tags: [explainer, guided-tour, css, specificity]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+cast: [Amira, Noor, Sam]
+cast_source: ../cast.json
 ---
 
 This tour is for anyone who has written a CSS rule that did nothing. After it, you will know

@@ -1,0 +1,22 @@
+{
+  "Amira": {
+    "role": "A customer waiting for a parcel",
+    "goal": "The page shows the right status, quickly, and is never blank or wrong"
+  },
+  "Sam": {
+    "role": "The on-call engineer who runs the poller",
+    "goal": "Carrier trouble does not become our trouble; the pager stays quiet"
+  },
+  "Dana": {
+    "role": "An integrations engineer at a courier company, whose API we poll",
+    "goal": "Our traffic does not knock their service over"
+  },
+  "Noor": {
+    "role": "A front-end developer on the customer app",
+    "goal": "The page looks and behaves as designed, and the CSS is something the next person can change"
+  },
+  "Lee": {
+    "role": "An operations analyst who reads the weekly report",
+    "goal": "The numbers mean what the label says, and match what the carrier reports"
+  }
+}

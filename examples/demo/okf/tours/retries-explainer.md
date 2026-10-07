@@ -4,6 +4,8 @@ title: "Guided tour: retries without a stampede"
 description: "Start here. Why a client waits longer after each failure, why every client must wait a different amount, and what the cap is for. Closes with a quiz."
 tags: [explainer, guided-tour, retries, reliability]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+cast: [Amira, Sam, Dana]
+cast_source: ../cast.json
 ---
 
 This tour is for anyone about to change how a client retries. After it, you will know why the

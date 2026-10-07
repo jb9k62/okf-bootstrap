@@ -4,6 +4,8 @@ title: "Guided tour: have we seen this event?"
 description: "How a few bits can remember a large set of ids, why 'no' is certain and 'yes' is only likely, and why a Bloom filter belongs in front of a check, not in place of one. A widget shows the bits. Closes with a quiz."
 tags: [explainer, guided-tour, data-structures, bloom-filter]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+cast: [Sam, Dana, Amira]
+cast_source: ../cast.json
 ---
 
 This tour is for anyone who must ask "have I seen this id before?" about a large set. After

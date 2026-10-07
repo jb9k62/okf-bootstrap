@@ -4,6 +4,8 @@ title: "Guided tour: which week is it?"
 description: "Why a week that starts at Monday 00:00 UTC puts some local Mondays in the previous week, with a widget to scrub time across zones."
 tags: [explainer, guided-tour, time, weeks]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+cast: [Amira, Lee, Sam]
+cast_source: ../cast.json
 ---
 
 A short tour for anyone who groups data by week. The

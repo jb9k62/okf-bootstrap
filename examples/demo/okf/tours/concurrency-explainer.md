@@ -4,6 +4,8 @@ title: "Guided tour: how many requests at once?"
 description: "Why raising the concurrency limit stops helping, what a connection costs, and what the longest chain of dependent requests has to do with it. A widget shows the waterfall. Closes with a quiz."
 tags: [explainer, guided-tour, http, concurrency, performance]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+cast: [Amira, Sam, Dana]
+cast_source: ../cast.json
 ---
 
 This tour is for anyone choosing how many requests a client sends at once. After it, you will

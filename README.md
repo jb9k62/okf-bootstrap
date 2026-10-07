@@ -288,3 +288,4 @@ agree), and the tag in the pi install line above, add a changelog entry, then ta
 MIT, see [LICENSE](LICENSE). The vendored OKF spec is Apache-2.0, see [NOTICE](NOTICE). The
 viewer is based on the reference viewer in
 [GoogleCloudPlatform/knowledge-catalog](https://github.com/GoogleCloudPlatform/knowledge-catalog).
+The edukai agent memory concept is inspired by [ZeroClue/edukai-kit](https://github.com/ZeroClue/edukai-kit) (MIT).

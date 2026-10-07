@@ -4,6 +4,8 @@ title: "Guided tour: who gets through the limiter?"
 description: "Why a fixed-window rate limit lets through twice its limit at the boundary, and how a sliding window and a token bucket avoid it. A widget steps through the requests. Closes with a quiz."
 tags: [explainer, guided-tour, rate-limiting, reliability]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+cast: [Dana, Sam, Amira]
+cast_source: ../cast.json
 ---
 
 This tour is for anyone who protects a server, or must stay under someone else's limit. After

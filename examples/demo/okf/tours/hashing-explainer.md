@@ -4,6 +4,8 @@ title: "Guided tour: which server holds this key?"
 description: "Why 'hash modulo servers' moves almost every key when a server is added, how a hash ring moves only a fraction, and why each server needs many points on the ring. A widget shows both. Closes with a quiz."
 tags: [explainer, guided-tour, distributed-systems, hashing]
 generated: { by: example-agent/1.0, at: 2026-10-01T09:00:00Z }
+cast: [Amira, Sam]
+cast_source: ../cast.json
 ---
 
 This tour is for anyone spreading data across several servers. After it, you will know how to

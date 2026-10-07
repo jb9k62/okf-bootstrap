@@ -52,3 +52,6 @@ records, and ten guided tours, most with interactive widgets, all with quizzes. 
 What agents have learned about Parcel tracker lives in a second bundle, `examples/demo/edukai/`
 ([ADR-0004](/adr/0004-agent-memory-in-a-second-bundle.md)). Try it with `npm run demo:edukai`;
 the walkthrough is `examples/demo/README.md`.
+
+* [Agent memory](/parcel-tracker/agent-memory.md) - how the memory bundle is laid out, how a
+  lesson is found and ranked, and how it is kept true

@@ -10,7 +10,8 @@ This tour is for anyone who works beside a coding agent, or reviews what one wro
 you will know what a lesson is, how its state is worked out, and what an agent is told and
 when. There is no widget here: the demo runs from the command line, in four steps below. A
 [quiz](#quiz) closes it. The decision behind it is
-[ADR-0004](/adr/0004-agent-memory-in-a-second-bundle.md).
+[ADR-0004](/adr/0004-agent-memory-in-a-second-bundle.md), and the reference page, with the
+layout and how the search ranks, is [Agent memory](/parcel-tracker/agent-memory.md).
 
 ## Who is affected
 

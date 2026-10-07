@@ -27,7 +27,8 @@ Keep what agents learn in a second OKF bundle, `edukai/`, the **memory bundle**.
 **lesson**: one claim, the files it rests on (pinned by a content digest), and where possible
 a check that code can re-run. A tool derives each lesson's state from the files, and harness
 hooks tell an agent about a lesson when it opens the file the lesson cites. The
-[memory tour](/tours/memory-explainer.md) walks through it.
+[memory tour](/tours/memory-explainer.md) walks through it, and
+[Agent memory](/parcel-tracker/agent-memory.md) describes the bundle as it stands.
 
 ## Consequences
 

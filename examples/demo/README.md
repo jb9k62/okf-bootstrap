@@ -7,8 +7,9 @@ repository root.
   an agent for the team. `npm run demo` renders it to `examples/demo/okf/viz.html`.
 - **`edukai/`, the memory bundle.** Nine lessons an agent learned about the code, kept so the
   next session starts knowing them. The rest of this page walks through it. The idea is
-  explained in the tour `okf/tours/memory-explainer.md`, and the decision in
-  `okf/adr/0004-agent-memory-in-a-second-bundle.md`.
+  explained in the tour `okf/tours/memory-explainer.md`, the decision in
+  `okf/adr/0004-agent-memory-in-a-second-bundle.md`, and the layout and the search ranking in
+  `okf/parcel-tracker/agent-memory.md`.
 
 The lessons cite a few small real files: `src/`, `.github/workflows/ci.yml` and `Makefile`.
 `examples/demo/` is the demo's project root, so a lesson names them as `src/poller/retry.ts`.

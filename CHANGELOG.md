@@ -37,7 +37,9 @@
   badge says what replaced it.
 - **Demo**: Parcel tracker gains a memory bundle (`examples/demo/edukai`, nine lessons, two wrong
   on purpose), a few source files for them to cite, ADR-0004, a tour of the lesson lifecycle,
-  and a command-line walkthrough in `examples/demo/README.md` (`npm run demo:edukai`).
+  a reference concept on how the memory is laid out, searched and kept true
+  (`parcel-tracker/agent-memory.md`), and a command-line walkthrough in
+  `examples/demo/README.md` (`npm run demo:edukai`).
 - **Fixed**: a race in the viewer's e2e tests, where a concept opened from the table could land
   in the middle of the next test.
 - **One layout for every widget**: slider rows share a label, track and value grid; the presets

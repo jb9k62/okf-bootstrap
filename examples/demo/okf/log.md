@@ -6,6 +6,9 @@
   [memory tour](/tours/memory-explainer.md): what agents learn about Parcel tracker is kept in
   a second bundle, `examples/demo/edukai/`. The demo gained a few small source files under
   `examples/demo/src/` for its lessons to cite.
+- Added [Agent memory](/parcel-tracker/agent-memory.md), the reference page for that bundle:
+  its layout, the fields of a lesson, the three ways a lesson is found, how the search ranks,
+  and each lesson's state at the demo clock.
 
 ## 2026-10-01
 

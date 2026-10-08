@@ -1541,6 +1541,28 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
 #status-progress { flex: 0 0 auto; font-variant-numeric: tabular-nums; }
 #status-top { flex: 0 0 auto; padding: 3px 9px; font-size: 12px; }
 
+/* B: shortcuts */
+/* Ctrl+key hints: a badge pinned to the top-right corner of each target, so no layout shifts */
+.segmented button, #filters-toggle, #display-toggle, #reading-toggle, #theme-toggle, #hood-toggle, #reset { position: relative; }
+.kbd-hint {
+  position: absolute;
+  top: -8px;
+  right: -6px;
+  z-index: 2;
+  padding: 0 4px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: 600 10px/16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.18);
+}
+body:not(.kbd-hints) .kbd-hint, .kbd-hint[hidden] { display: none; }
+/* Phones and tablets have no Ctrl key to hold, so the hints stay off there (the keys still work) */
+@media (pointer: coarse) { .kbd-hint { display: none !important; } }
+
 @media (max-width: 820px) {
   main { flex-direction: column; }
   #graph-pane { flex: 0 0 40vh; border-right: 0; border-bottom: 1px solid var(--border); }
@@ -3179,6 +3201,75 @@ const JS = `
       return { quizErrors, knownCallouts, unknownCallouts };
     },
   };
+
+  // --- B: shortcuts ---
+  // Ctrl plus a key runs one entry of SHORTCUTS. Holding Ctrl shows each target's key as a badge.
+  // The registry drives the handler, the badges and window.__OKF_SHORTCUTS__ (for the tests).
+  const isShown = (el) => !!el && el.getClientRects().length > 0;
+  const viewButton = (name) => $("view-switch").querySelector('button[data-view="' + name + '"]');
+  const SHORTCUTS = [
+    { id: "search", key: "/", label: "Search", el: $("search"), run: () => $("search").focus(), when: () => true },
+    { id: "view-graph", key: "1", label: "Graph view", el: viewButton("graph"), run: () => viewButton("graph").click(), when: () => true },
+    { id: "view-tree", key: "2", label: "Tree view", el: viewButton("tree"), run: () => viewButton("tree").click(), when: () => true },
+    { id: "view-table", key: "3", label: "Table view", el: viewButton("table"), run: () => viewButton("table").click(), when: () => true },
+    { id: "filters", key: "l", label: "Filters", el: $("filters-toggle"), run: () => $("filters-toggle").click(), when: () => true },
+    { id: "display", key: "u", label: "Display", el: $("display-toggle"), run: () => $("display-toggle").click(), when: () => true },
+    { id: "reading", key: "r", label: "Reading view", el: $("reading-toggle"), run: () => $("reading-toggle").click(), when: () => true },
+    { id: "theme", key: "y", label: "Theme", el: $("theme-toggle"), run: () => $("theme-toggle").click(), when: () => true },
+    { id: "hood", key: "h", label: "Neighbourhood", el: $("hood-toggle"), run: () => $("hood-toggle").click(), when: () => view === "graph" },
+    { id: "reset", key: "j", label: "Reset", el: $("reset"), run: () => $("reset").click(), when: () => isShown($("reset")) },
+  ];
+  window.__OKF_SHORTCUTS__ = SHORTCUTS;
+
+  // The search box is an input and cannot hold a badge, so its hint is the placeholder. When the
+  // hint goes away, the placeholder returns to the one the search-mode control sets.
+  const modePlaceholder = () => ($("search-mode").value === "ranked" ? "Search concepts" : "Filter by title, path or tag");
+  const keyLabel = (key) => (/[a-z]/.test(key) ? key.toUpperCase() : key);
+  for (const entry of SHORTCUTS) {
+    entry.el.setAttribute("aria-keyshortcuts", "Control+" + keyLabel(entry.key));
+    if (entry.id === "search") continue;
+    entry.badge = document.createElement("kbd");
+    entry.badge.className = "kbd-hint";
+    entry.badge.setAttribute("aria-hidden", "true");
+    entry.badge.textContent = "Ctrl+" + keyLabel(entry.key);
+    entry.el.append(entry.badge);
+  }
+
+  let hintsOn = false;
+  // Badges are reattached and re-shown here: a theme switch rewrites the theme button's text,
+  // which drops its badge, and a shortcut can open or close a panel that hides a target.
+  function syncHints() {
+    for (const entry of SHORTCUTS) {
+      if (!entry.badge) continue;
+      if (entry.badge.parentElement !== entry.el) entry.el.append(entry.badge);
+      entry.badge.hidden = !isShown(entry.el);
+    }
+  }
+  function setHints(on) {
+    hintsOn = on;
+    document.body.classList.toggle("kbd-hints", on);
+    $("search").placeholder = on ? "Ctrl+/ to search" : modePlaceholder();
+    if (on) syncHints();
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Control") {
+      if (!event.repeat) setHints(true);
+      return;
+    }
+    if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.repeat) return;
+    const key = event.key.toLowerCase();
+    const entry = SHORTCUTS.find((s) => (/^[0-9]$/.test(s.key) ? event.code === "Digit" + s.key : key === s.key));
+    if (!entry || !entry.when()) return;
+    // While the search modal is open only search and reset work, so the modal keeps its keys.
+    if (document.body.classList.contains("search-open") && entry.id !== "search" && entry.id !== "reset") return;
+    event.preventDefault();
+    entry.run();
+    if (hintsOn) syncHints();
+  });
+  document.addEventListener("keyup", (event) => { if (event.key === "Control") setHints(false); });
+  window.addEventListener("blur", () => setHints(false));
+  document.addEventListener("visibilitychange", () => setHints(false));
 })();
 `;
 

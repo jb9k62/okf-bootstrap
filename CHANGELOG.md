@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Keyboard shortcuts**: Ctrl plus a key focuses search, switches view, opens Filters and Display, toggles Reading, theme, Neighbourhood and Reset; hold Ctrl to see the keys on the buttons.
+
 ## 0.6.0 - 2026-10-08
 
 - **`npm run okf:update`**: brings a project's generated tools (`scripts/okf-*`) up to a release.

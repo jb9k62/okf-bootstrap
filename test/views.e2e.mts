@@ -1043,7 +1043,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
       await p.waitForSelector('#detail-body .mermaid[data-state="rendered"]', { timeout: 20_000 });
       await p.click('#detail-body .mermaid button[data-act="expand"]');
       assert.equal(await p.locator('#detail-body .mermaid.expanded').count(), 1, 'the diagram is expanded');
-      await p.keyboard.press('Control+/');
+      await p.keyboard.press('/');
       assert.equal(await modalShown(p), true, 'the modal opens');
       await p.keyboard.press('Escape');
       assert.equal(await modalShown(p), false, 'the modal closes');
@@ -1112,7 +1112,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
 
     const p = await openViewer({ file });
     try {
-      await p.keyboard.press('Control+/');
+      await p.keyboard.press('/');
       await p.keyboard.type('retry');
       await p.hover('#sm-list .sr-item[data-id="parcel-tracker/retry-policy"]');
       const contents = await p.$$eval('#sm-toc .sm-toc-link', (els) => els.map((e) => e.textContent));
@@ -1129,8 +1129,8 @@ describe('viewer views', { timeout: 120_000 }, () => {
   });
 });
 
-// B: keyboard shortcuts. Ctrl plus a key drives the toolbar, and holding Ctrl shows the keys.
-type Shortcut = { id: string; key: string; el: Element | null };
+// B: keyboard shortcuts. A plain key drives the toolbar when focus is not in a field; Ctrl+K also works from one.
+type Shortcut = { id: string; key: string; ctrl?: string; el: Element | null };
 type KeyInit = { key: string; code: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; repeat?: boolean };
 
 describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
@@ -1179,7 +1179,7 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
-  // Every test starts from a fresh page: graph view, panels closed, nothing searched.
+  // Every test starts from a fresh page: graph view, panels closed, nothing searched, focus on the body.
   const shortcut = (name: string, fn: () => Promise<void>) =>
     it(name, async (t) => {
       if (skipReason) return t.skip(skipReason);
@@ -1191,7 +1191,10 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
     });
 
   const press = (combo: string) => page.keyboard.press(combo);
+  const modalShown = () => page.isVisible('#search-modal');
   const viewOf = () => page.getAttribute('body', 'data-view');
+  const focusedId = () => page.evaluate(() => document.activeElement?.id ?? '');
+  const expanded = (id: string) => page.getAttribute(id, 'aria-expanded');
   // Dispatches a keydown on the page and reports whether a handler prevented its default action.
   const dispatchKey = (init: KeyInit) =>
     page.evaluate(
@@ -1204,9 +1207,15 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
       [...document.querySelectorAll('.kbd-hint')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.textContent ?? ''),
     );
 
-  shortcut('the registry has unique ids and keys, each with a target', async () => {
+  shortcut('the registry has unique ids and keys, each with a target and its aria-keyshortcuts', async () => {
     const list = await page.evaluate(() =>
-      (window as unknown as { __OKF_SHORTCUTS__: Shortcut[] }).__OKF_SHORTCUTS__.map((e) => ({ id: e.id, key: e.key, hasEl: e.el !== null })),
+      (window as unknown as { __OKF_SHORTCUTS__: Shortcut[] }).__OKF_SHORTCUTS__.map((e) => ({
+        id: e.id,
+        key: e.key,
+        ctrl: e.ctrl ?? null,
+        hasEl: e.el !== null,
+        aria: e.el?.getAttribute('aria-keyshortcuts') ?? null,
+      })),
     );
     assert.equal(list.length, 10);
     assert.equal(new Set(list.map((e) => e.id)).size, list.length, 'ids are unique');
@@ -1214,103 +1223,182 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
     assert.ok(list.every((e) => e.hasEl), 'every entry has an element');
     assert.deepEqual(
       list.map((e) => e.key),
-      ['/', '1', '2', '3', 'l', 'u', 'r', 'y', 'h', 'j'],
+      ['/', '1', '2', '3', 'f', 'd', 'r', 't', 'n', 'x'],
+    );
+    assert.deepEqual(
+      list.filter((e) => e.ctrl !== null).map((e) => [e.id, e.ctrl]),
+      [['search', 'k']],
+      'Ctrl+K is the only modified key',
+    );
+    assert.deepEqual(
+      list.map((e) => e.aria),
+      ['/ Control+K', '1', '2', '3', 'f', 'd', 'r', 't', 'n', 'x'],
     );
   });
 
-  shortcut('Ctrl+/ focuses the search box', async () => {
-    await press('Control+/');
-    assert.equal(await page.isVisible('#search-modal'), true, 'the search modal opens');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'sm-input');
+  shortcut('/ opens the search modal with focus in its box, and Escape closes it', async () => {
+    await press('/');
+    assert.equal(await modalShown(), true, 'the search modal opens');
+    assert.equal(await focusedId(), 'sm-input');
     await page.keyboard.press('Escape');
-    assert.equal(await page.isVisible('#search-modal'), false);
+    assert.equal(await modalShown(), false);
+    assert.equal(await focusedId(), 'search', 'focus returns to the box');
   });
 
-  shortcut('Ctrl+/ opens the search again after Escape, and Enter or ArrowDown on the box does too', async () => {
-    await press('Control+/');
+  shortcut('Ctrl+K opens search again after Escape, and Enter or ArrowDown on the box does too', async () => {
+    await press('/');
     await page.keyboard.type('parcel');
     await page.keyboard.press('Escape');
-    assert.equal(await page.isVisible('#search-modal'), false, 'Escape closes it');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'search', 'focus returns to the box');
-    await press('Control+/');
-    assert.equal(await page.isVisible('#search-modal'), true, 'Ctrl+/ reopens it');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'sm-input');
+    assert.equal(await modalShown(), false, 'Escape closes it');
+    assert.equal(await focusedId(), 'search', 'focus returns to the box');
+    await press('Control+k');
+    assert.equal(await modalShown(), true, 'Ctrl+K reopens it');
+    assert.equal(await focusedId(), 'sm-input');
     await page.keyboard.press('Escape');
     await page.keyboard.press('Enter');
-    assert.equal(await page.isVisible('#search-modal'), true, 'Enter on the box opens it');
+    assert.equal(await modalShown(), true, 'Enter on the box opens it');
     await page.keyboard.press('Escape');
     await page.keyboard.press('ArrowDown');
-    assert.equal(await page.isVisible('#search-modal'), true, 'ArrowDown on the box opens it');
+    assert.equal(await modalShown(), true, 'ArrowDown on the box opens it');
     await page.keyboard.press('Escape');
-    assert.equal(await page.isVisible('#search-modal'), false);
+    assert.equal(await modalShown(), false);
   });
 
-  shortcut('Ctrl+j while the modal is open clears its box too and shows the hint', async () => {
-    await press('Control+/');
-    await page.keyboard.type('parcel');
-    assert.ok((await page.locator('#sm-list .sr-item').count()) > 0, 'results appear before the reset');
-    await press('Control+j');
-    assert.equal(await page.inputValue('#sm-input'), '', 'the modal box is cleared');
-    assert.equal(await page.inputValue('#search'), '', 'the top-bar box is cleared');
-    assert.equal(await page.locator('#sm-list .sr-item').count(), 0, 'no results are left');
-    assert.equal(await page.textContent('#sm-status'), 'Type to search', 'the hint is shown');
-    assert.equal(await page.isVisible('#search-modal'), true, 'the modal stays open');
+  shortcut('Ctrl+K works from inside a field, and / typed in the modal box is a character', async () => {
+    await press('f');
+    await page.focus('#search-mode');
+    await press('Control+k');
+    assert.equal(await modalShown(), true, 'Ctrl+K opens the modal from a select');
+    assert.equal(await focusedId(), 'sm-input');
+    await page.keyboard.type('a/b');
+    assert.equal(await page.inputValue('#sm-input'), 'a/b', 'the slash is typed, not a shortcut');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.getAttribute('#filters-toggle', 'aria-expanded'), 'true', 'the Filters panel is still open');
+  });
+
+  shortcut('typing the letters in the open modal box triggers nothing', async () => {
+    const theme = await page.getAttribute('html', 'data-theme');
+    await page.click('#search');
+    assert.equal(await modalShown(), true, 'focusing the box opens the modal');
+    await page.keyboard.type('fdrtn?');
+    assert.equal(await page.inputValue('#sm-input'), 'fdrtn?', 'the letters are typed in the modal box');
+    assert.equal(await expanded('#filters-toggle'), 'false', 'f does not open Filters');
+    assert.equal(await expanded('#display-toggle'), 'false', 'd does not open Display');
+    assert.equal(await page.getAttribute('#reading-toggle', 'aria-pressed'), 'false', 'r does not toggle Reading');
+    assert.equal(await page.getAttribute('html', 'data-theme'), theme, 'the theme is unchanged');
+    assert.equal(await viewOf(), 'graph', 't and n do not change the view');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('kbd-hints')), false, '? in a box does not show the hints');
     await page.keyboard.press('Escape');
   });
 
-  shortcut('Ctrl+1, 2 and 3 switch the view', async () => {
-    await press('Control+2');
+  shortcut('typing the letters in the top-bar box, with the modal closed, triggers nothing', async () => {
+    await page.click('#search');
+    await page.keyboard.press('Escape');
+    assert.equal(await modalShown(), false, 'Escape closes the modal and focus stays in the box');
+    const theme = await page.getAttribute('html', 'data-theme');
+    await page.keyboard.type('fdrtn');
+    assert.equal(await page.inputValue('#search'), 'fdrtn', 'the letters are typed in the top-bar box');
+    assert.equal(await expanded('#filters-toggle'), 'false', 'f does not open Filters');
+    assert.equal(await expanded('#display-toggle'), 'false', 'd does not open Display');
+    assert.equal(await page.getAttribute('#reading-toggle', 'aria-pressed'), 'false', 'r does not toggle Reading');
+    assert.equal(await page.getAttribute('html', 'data-theme'), theme, 't does not switch the theme');
+    assert.equal(await viewOf(), 'graph', 'n does not change the view');
+  });
+
+  shortcut('typing in a select triggers nothing, and Filters and Display stay as they were', async () => {
+    const theme = await page.getAttribute('html', 'data-theme');
+    await press('f');
+    await page.focus('#filter-type');
+    await page.keyboard.press('t');
+    await page.keyboard.press('d');
+    await page.keyboard.press('r');
+    await page.keyboard.press('n');
+    assert.equal(await expanded('#filters-toggle'), 'true', 'Filters is still open');
+    assert.equal(await expanded('#display-toggle'), 'false', 'd does not open Display');
+    assert.equal(await page.getAttribute('#reading-toggle', 'aria-pressed'), 'false');
+    assert.equal(await page.getAttribute('html', 'data-theme'), theme);
+    assert.equal(await viewOf(), 'graph');
+  });
+
+  shortcut('while the search modal is open only / and Ctrl+K work', async () => {
+    const theme = await page.getAttribute('html', 'data-theme');
+    await press('/');
+    await page.focus('#sm-close');
+    await press('2');
+    await press('f');
+    await press('d');
+    await press('t');
+    await press('r');
+    assert.equal(await viewOf(), 'graph', 'the view does not change');
+    assert.equal(await expanded('#filters-toggle'), 'false', 'Filters does not open');
+    assert.equal(await expanded('#display-toggle'), 'false', 'Display does not open');
+    assert.equal(await page.getAttribute('html', 'data-theme'), theme, 'the theme does not change');
+    assert.equal(await modalShown(), true, 'the modal stays open');
+    assert.equal(await dispatchKey({ key: '3', code: 'Digit3', ctrlKey: true }), false, 'Ctrl+3 is not handled');
+    assert.equal(await viewOf(), 'graph');
+
+    await press('/');
+    assert.equal(await focusedId(), 'sm-input', '/ moves focus back to the box');
+    await page.focus('#sm-close');
+    await press('Control+k');
+    assert.equal(await focusedId(), 'sm-input', 'Ctrl+K moves focus back to the box');
+    await page.keyboard.press('Escape');
+    assert.equal(await modalShown(), false);
+  });
+
+  shortcut('1, 2 and 3 switch the view', async () => {
+    await press('2');
     assert.equal(await viewOf(), 'tree');
     assert.equal(await page.getAttribute('button[data-view="tree"]', 'aria-pressed'), 'true');
-    await press('Control+3');
+    await press('3');
     assert.equal(await viewOf(), 'table');
     assert.equal(await page.isVisible('#table-wrap'), true);
-    await press('Control+1');
+    await press('1');
     assert.equal(await viewOf(), 'graph');
     assert.equal(await page.getAttribute('button[data-view="graph"]', 'aria-pressed'), 'true');
   });
 
-  shortcut('Ctrl+l and Ctrl+u open and close Filters and Display', async () => {
-    await press('Control+l');
-    assert.equal(await page.getAttribute('#filters-toggle', 'aria-expanded'), 'true');
+  shortcut('f and d open and close Filters and Display', async () => {
+    await press('f');
+    assert.equal(await expanded('#filters-toggle'), 'true');
     assert.equal(await page.isVisible('#filters-panel'), true);
-    await press('Control+l');
-    assert.equal(await page.getAttribute('#filters-toggle', 'aria-expanded'), 'false');
-    await press('Control+u');
-    assert.equal(await page.getAttribute('#display-toggle', 'aria-expanded'), 'true');
+    await press('f');
+    assert.equal(await expanded('#filters-toggle'), 'false');
+    await press('d');
+    assert.equal(await expanded('#display-toggle'), 'true');
     assert.equal(await page.isVisible('#display-panel'), true);
-    await press('Control+u');
-    assert.equal(await page.getAttribute('#display-toggle', 'aria-expanded'), 'false');
+    await press('d');
+    assert.equal(await expanded('#display-toggle'), 'false');
   });
 
-  shortcut('Ctrl+r toggles the Reading view', async () => {
-    await press('Control+r');
+  shortcut('r toggles the Reading view', async () => {
+    await press('r');
     assert.equal(await page.evaluate(() => document.body.classList.contains('reading')), true);
     assert.equal(await page.getAttribute('#reading-toggle', 'aria-pressed'), 'true');
-    await press('Control+r');
+    await press('r');
     assert.equal(await page.evaluate(() => document.body.classList.contains('reading')), false);
   });
 
-  shortcut('Ctrl+y switches the theme and back', async () => {
+  shortcut('t switches the theme and back', async () => {
     const before = await page.getAttribute('html', 'data-theme');
-    await press('Control+y');
+    await press('t');
     assert.notEqual(await page.getAttribute('html', 'data-theme'), before, 'the theme changed');
-    await press('Control+y');
+    await press('t');
     assert.equal(await page.getAttribute('html', 'data-theme'), before);
   });
 
-  shortcut('Ctrl+h toggles Neighbourhood in the graph view only', async () => {
-    await press('Control+h');
+  shortcut('n toggles Neighbourhood in the graph view only', async () => {
+    await press('n');
     assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'true');
-    await press('Control+h');
+    await press('n');
     assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'false');
-    await press('Control+2');
-    await press('Control+h');
+    await press('2');
+    await press('n');
     assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'false', 'no-op in the tree view');
-    await press('Control+1');
+    await press('1');
   });
 
-  shortcut('Ctrl+j resets only while Reset is showing', async () => {
+  shortcut('x resets only while Reset is showing', async () => {
     const clicks = () => page.evaluate(() => (window as unknown as Record<string, number>).resetClicks);
     await page.evaluate(() => {
       (window as unknown as Record<string, number>).resetClicks = 0;
@@ -1319,75 +1407,93 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
       });
     });
     assert.equal(await page.isHidden('#reset'), true);
-    await press('Control+j');
+    await press('x');
     assert.equal(await clicks(), 0, 'a hidden Reset is a no-op');
 
-    await page.fill('#search', 'box');
-    assert.equal(await page.isVisible('#reset'), true);
-    await press('Control+j');
+    await press('/');
+    await page.keyboard.type('box');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isVisible('#reset'), true, 'the query shows Reset');
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await press('x');
     assert.equal(await page.inputValue('#search'), '', 'the query is cleared');
     assert.equal(await clicks(), 1);
   });
 
-  shortcut('holding Ctrl shows a badge on each visible target, and releasing hides them', async () => {
-    await page.keyboard.down('Control');
-    const expected = await page.evaluate(() =>
-      (window as unknown as { __OKF_SHORTCUTS__: Array<{ id: string; key: string; el: Element }> }).__OKF_SHORTCUTS__
-        .filter((e) => e.id !== 'search' && e.el.getClientRects().length > 0)
-        .map((e) => 'Ctrl+' + e.key.toUpperCase()),
-    );
-    // Graph view with the panels closed: three views, Filters, Display, Reading and the theme.
-    assert.deepEqual(expected, ['Ctrl+1', 'Ctrl+2', 'Ctrl+3', 'Ctrl+L', 'Ctrl+U', 'Ctrl+R', 'Ctrl+Y']);
-    assert.deepEqual((await visibleBadges()).sort(), [...expected].sort());
-    assert.equal(await page.getAttribute('#search', 'placeholder'), 'Ctrl+/ to search');
-
-    await page.keyboard.up('Control');
+  shortcut('? shows the key badges on the visible buttons, and Escape clears them', async () => {
+    await press('?');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('kbd-hints')), true);
+    assert.deepEqual((await visibleBadges()).sort(), ['1', '2', '3', 'd', 'f', 'r', 't'], 'the badges are the bare keys');
+    assert.equal(await page.getAttribute('#search', 'placeholder'), '/ to search');
+    await page.keyboard.press('Escape');
     assert.deepEqual(await visibleBadges(), []);
     assert.equal(await page.getAttribute('#search', 'placeholder'), 'Search concepts');
   });
 
-  shortcut('a badge follows a target that opens, and blur or a hidden tab clears the hints', async () => {
-    // Control stays held, so the bare key is pressed with it (press('Control+u') would release Control).
-    await page.keyboard.down('Control');
-    await page.keyboard.press('u');
-    assert.ok((await visibleBadges()).includes('Ctrl+H'), 'Neighbourhood shows once Display is open');
+  shortcut('? toggles the badges off, and another key, a click, a blur or a hidden tab clears them', async () => {
+    await press('?');
+    await press('?');
+    assert.deepEqual(await visibleBadges(), [], 'a second ? hides them');
+
+    await press('?');
+    await press('f');
+    assert.deepEqual(await visibleBadges(), [], 'a shortcut hides them');
+    assert.equal(await expanded('#filters-toggle'), 'true', 'and runs');
+    await press('f');
+
+    await press('?');
     await page.evaluate(() => window.dispatchEvent(new Event('blur')));
-    assert.deepEqual(await visibleBadges(), []);
-    await page.keyboard.up('Control');
+    assert.deepEqual(await visibleBadges(), [], 'a window blur clears them');
 
-    await page.keyboard.down('Control');
+    await press('?');
     await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
-    assert.deepEqual(await visibleBadges(), []);
-    await page.keyboard.up('Control');
-    await press('Control+u');
+    assert.deepEqual(await visibleBadges(), [], 'a hidden tab clears them');
+
+    await press('?');
+    await page.locator('#statusbar').click();
+    assert.deepEqual(await visibleBadges(), [], 'a click elsewhere clears them');
   });
 
-  shortcut('Meta, Alt, Shift and repeated combinations do nothing and are not prevented', async () => {
-    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', metaKey: true }), false);
-    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true, metaKey: true }), false);
-    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true, altKey: true }), false);
-    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true, shiftKey: true }), false);
-    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true, repeat: true }), false);
+  shortcut('the badges follow a theme switch and hide on targets that are not showing', async () => {
+    await press('t');
+    await press('?');
+    assert.deepEqual((await visibleBadges()).filter((b) => b === 't').length, 1, 'the theme button has one badge after a switch');
+    await page.keyboard.press('Escape');
+    await press('2');
+    await press('?');
+    const shown = await visibleBadges();
+    assert.ok(shown.includes('2'), 'the tree view button shows its badge');
+    assert.equal(shown.includes('n'), false, 'Neighbourhood is not showing in the tree view');
+    assert.equal(shown.includes('x'), false, 'Reset is hidden');
+    await page.keyboard.press('Escape');
+    await press('1');
+  });
+
+  shortcut('Meta, Alt and Shift combinations do nothing and are not prevented; Ctrl+K needs Ctrl alone', async () => {
+    const inits: KeyInit[] = [
+      { key: '2', code: 'Digit2', metaKey: true },
+      { key: '2', code: 'Digit2', ctrlKey: true, metaKey: true },
+      { key: '2', code: 'Digit2', ctrlKey: true, altKey: true },
+      { key: '2', code: 'Digit2', altKey: true },
+      { key: '2', code: 'Digit2', ctrlKey: true, shiftKey: true },
+      { key: 'F', code: 'KeyF', shiftKey: true },
+      { key: 'k', code: 'KeyK', ctrlKey: true, metaKey: true },
+      { key: 'k', code: 'KeyK', ctrlKey: true, altKey: true },
+      { key: 'K', code: 'KeyK', ctrlKey: true, shiftKey: true },
+    ];
+    for (const init of inits) assert.equal(await dispatchKey(init), false, `${JSON.stringify(init)} is not prevented`);
+    assert.equal(await modalShown(), false, 'Ctrl+K with Meta, Alt or Shift does not open search');
     assert.equal(await viewOf(), 'graph');
+    assert.equal(await expanded('#filters-toggle'), 'false');
   });
 
-  shortcut('a matched shortcut is prevented, an unmatched Ctrl key is not', async () => {
-    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true }), true, 'Ctrl+2 is prevented');
+  shortcut('a repeated key does nothing; a matched key is prevented and an unmatched one is not', async () => {
+    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', repeat: true }), false, 'a repeat is not prevented');
+    assert.equal(await viewOf(), 'graph');
+    assert.equal(await dispatchKey({ key: '2', code: 'Digit2' }), true, '2 is prevented');
     assert.equal(await viewOf(), 'tree');
+    assert.equal(await dispatchKey({ key: 'z', code: 'KeyZ' }), false, 'z is left alone');
     assert.equal(await dispatchKey({ key: 'z', code: 'KeyZ', ctrlKey: true }), false, 'Ctrl+Z is left alone');
-    await press('Control+1');
-  });
-
-  shortcut('while the search modal is open only search and reset work', async () => {
-    await press('Control+/');
-    try {
-      assert.equal(await page.evaluate(() => document.body.classList.contains('search-open')), true);
-      assert.equal(await dispatchKey({ key: '3', code: 'Digit3', ctrlKey: true }), false);
-      assert.equal(await viewOf(), 'graph', 'the view does not change');
-      assert.equal(await dispatchKey({ key: '/', code: 'Slash', ctrlKey: true }), true);
-      assert.equal(await page.evaluate(() => document.activeElement?.id), 'sm-input');
-    } finally {
-      await page.keyboard.press('Escape');
-    }
+    await press('1');
   });
 });

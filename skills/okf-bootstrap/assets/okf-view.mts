@@ -1681,7 +1681,7 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
 #status-top { flex: 0 0 auto; padding: 3px 9px; font-size: 12px; }
 
 /* B: shortcuts */
-/* Ctrl+key hints: a badge pinned to the top-right corner of each target, so no layout shifts */
+/* Key hints (shown while ? is on): a badge pinned to the top-right corner of each target, so no layout shifts */
 .segmented button, #filters-toggle, #display-toggle, #reading-toggle, #theme-toggle, #hood-toggle, #reset { position: relative; }
 .kbd-hint {
   position: absolute;
@@ -3741,35 +3741,38 @@ const JS = `
   };
 
   // --- B: shortcuts ---
-  // Ctrl plus a key runs one entry of SHORTCUTS. Holding Ctrl shows each target's key as a badge.
-  // The registry drives the handler, the badges and window.__OKF_SHORTCUTS__ (for the tests).
+  // A plain key runs one entry of SHORTCUTS when no modifier is held and focus is not where typing goes
+  // (a field, a select, or anything editable). Ctrl+K is the one modified shortcut, and it works from fields.
+  // '?' toggles the key badges on the buttons; Escape, another key, a click, a blur or a hidden tab clears them.
+  // The registry drives the handlers, the badges, aria-keyshortcuts and window.__OKF_SHORTCUTS__ (for the tests).
   const isShown = (el) => !!el && el.getClientRects().length > 0;
   const viewButton = (name) => $("view-switch").querySelector('button[data-view="' + name + '"]');
   const SHORTCUTS = [
-    { id: "search", key: "/", label: "Search", el: $("search"), run: () => (modal.hidden ? openSearch() : $("sm-input").focus()), when: () => true },
+    { id: "search", key: "/", ctrl: "k", label: "Search", el: $("search"), run: () => (modal.hidden ? openSearch() : $("sm-input").focus()), when: () => true },
     { id: "view-graph", key: "1", label: "Graph view", el: viewButton("graph"), run: () => viewButton("graph").click(), when: () => true },
     { id: "view-tree", key: "2", label: "Tree view", el: viewButton("tree"), run: () => viewButton("tree").click(), when: () => true },
     { id: "view-table", key: "3", label: "Table view", el: viewButton("table"), run: () => viewButton("table").click(), when: () => true },
-    { id: "filters", key: "l", label: "Filters", el: $("filters-toggle"), run: () => $("filters-toggle").click(), when: () => true },
-    { id: "display", key: "u", label: "Display", el: $("display-toggle"), run: () => $("display-toggle").click(), when: () => true },
+    { id: "filters", key: "f", label: "Filters", el: $("filters-toggle"), run: () => $("filters-toggle").click(), when: () => true },
+    { id: "display", key: "d", label: "Display", el: $("display-toggle"), run: () => $("display-toggle").click(), when: () => true },
     { id: "reading", key: "r", label: "Reading view", el: $("reading-toggle"), run: () => $("reading-toggle").click(), when: () => true },
-    { id: "theme", key: "y", label: "Theme", el: $("theme-toggle"), run: () => $("theme-toggle").click(), when: () => true },
-    { id: "hood", key: "h", label: "Neighbourhood", el: $("hood-toggle"), run: () => $("hood-toggle").click(), when: () => view === "graph" },
-    { id: "reset", key: "j", label: "Reset", el: $("reset"), run: () => $("reset").click(), when: () => isShown($("reset")) },
+    { id: "theme", key: "t", label: "Theme", el: $("theme-toggle"), run: () => $("theme-toggle").click(), when: () => true },
+    { id: "hood", key: "n", label: "Neighbourhood", el: $("hood-toggle"), run: () => $("hood-toggle").click(), when: () => view === "graph" },
+    { id: "reset", key: "x", label: "Reset", el: $("reset"), run: () => $("reset").click(), when: () => isShown($("reset")) },
   ];
   window.__OKF_SHORTCUTS__ = SHORTCUTS;
+  // '?' is not a target: it toggles the badges. It is listed here so the key handler finds it like the rest.
+  const HELP = { id: "help", when: () => true, run: () => setHints(!hintsOn) };
 
   // The search box is an input and cannot hold a badge, so its hint is the placeholder. When the
   // hint goes away, the placeholder returns to the one the search-mode control sets.
   const modePlaceholder = () => ($("search-mode").value === "ranked" ? "Search concepts" : "Filter by title, path or tag");
-  const keyLabel = (key) => (/[a-z]/.test(key) ? key.toUpperCase() : key);
   for (const entry of SHORTCUTS) {
-    entry.el.setAttribute("aria-keyshortcuts", "Control+" + keyLabel(entry.key));
+    entry.el.setAttribute("aria-keyshortcuts", entry.ctrl ? entry.key + " Control+" + entry.ctrl.toUpperCase() : entry.key);
     if (entry.id === "search") continue;
     entry.badge = document.createElement("kbd");
     entry.badge.className = "kbd-hint";
     entry.badge.setAttribute("aria-hidden", "true");
-    entry.badge.textContent = "Ctrl+" + keyLabel(entry.key);
+    entry.badge.textContent = entry.key;
     entry.el.append(entry.badge);
   }
 
@@ -3786,28 +3789,45 @@ const JS = `
   function setHints(on) {
     hintsOn = on;
     document.body.classList.toggle("kbd-hints", on);
-    $("search").placeholder = on ? "Ctrl+/ to search" : modePlaceholder();
+    $("search").placeholder = on ? "/ to search" : modePlaceholder();
     if (on) syncHints();
+  }
+  function hideHints() {
+    if (hintsOn) setHints(false);
+  }
+
+  const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
+  // Where typing goes: a text field, a select (its keys pick an option) or anything editable.
+  const isTyping = (el) => !!el && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
+  // The entry a key press asks for, or null. Ctrl+K is the only key with a modifier; Shift is allowed only for ?.
+  function shortcutFor(event) {
+    const key = event.key.toLowerCase();
+    if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) return SHORTCUTS.find((s) => s.ctrl === key) || null;
+    if (event.ctrlKey || event.metaKey || event.altKey) return null;
+    if (event.key === "?") return HELP;
+    if (event.shiftKey) return null;
+    return SHORTCUTS.find((s) => s.key === key) || null;
   }
 
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Control") {
-      if (!event.repeat) setHints(true);
+    if (MODIFIER_KEYS.has(event.key) || event.repeat) return;
+    const entry = shortcutFor(event);
+    const modalOpen = document.body.classList.contains("search-open");
+    // Ctrl+K reaches the search from a field too. A plain key never runs while typing, and while the
+    // search modal is open only search (its '/' refocuses the box) runs, so the modal keeps its keys.
+    const usable = !!entry && entry.when() && (event.ctrlKey || !isTyping(document.activeElement)) && (!modalOpen || entry.id === "search");
+    if (!usable) {
+      hideHints();
       return;
     }
-    if (!event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.repeat) return;
-    const key = event.key.toLowerCase();
-    const entry = SHORTCUTS.find((s) => (/^[0-9]$/.test(s.key) ? event.code === "Digit" + s.key : key === s.key));
-    if (!entry || !entry.when()) return;
-    // While the search modal is open only search and reset work, so the modal keeps its keys.
-    if (document.body.classList.contains("search-open") && entry.id !== "search" && entry.id !== "reset") return;
     event.preventDefault();
+    if (entry !== HELP) hideHints();
     entry.run();
-    if (hintsOn) syncHints();
   });
-  document.addEventListener("keyup", (event) => { if (event.key === "Control") setHints(false); });
-  window.addEventListener("blur", () => setHints(false));
-  document.addEventListener("visibilitychange", () => setHints(false));
+  // Clicking elsewhere, leaving the window or hiding the tab clears the badges.
+  document.addEventListener("pointerdown", hideHints);
+  window.addEventListener("blur", hideHints);
+  document.addEventListener("visibilitychange", hideHints);
 })();
 `;
 

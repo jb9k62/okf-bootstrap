@@ -132,7 +132,7 @@ Node 24+ is required: the tools are TypeScript that Node runs directly, with no 
 **pi**, as a package (pin a tag for reproducible installs):
 
 ```bash
-pi install git:github.com/jb9k62/okf-bootstrap@v0.5.0
+pi install git:github.com/jb9k62/okf-bootstrap@v0.6.0
 ```
 
 **Claude Code**, as a plugin from this repo's marketplace:
@@ -190,6 +190,27 @@ npm run edukai:recheck      # lessons that need an agent: broken, failed, suspec
 ```
 
 Re-running the scaffold is safe: it keeps everything you wrote and refreshes only the tools.
+
+## Updating
+
+```bash
+npm run okf:update                  # dry run: what would change in the tools, to the latest release
+npm run okf:update -- --apply       # do it (refuses on a dirty git tree, so `git diff` is the undo)
+npm run okf:update -- --ref v0.5.0  # a specific release tag (an older one needs --allow-downgrade to apply)
+npm run okf:update -- --dir ../app   # a project other than the current directory
+```
+
+Updates run only when you run them; nothing checks in the background. Both modes fetch a
+release tag (never `main`) into a temporary folder. The dry run writes nothing in the project and
+runs none of the release's code; it lists the files that would change and the release's changelog.
+`--apply` runs the release's scaffold with `--tools-only`, so it runs code from that tag. A
+generated script you have edited is kept, and the release's copy is written beside it as
+`<name>.new`. Your authored files are never overwritten: when a release changes a template, its
+copy goes under `.okf-update/` for you to diff. Projects scaffolded before this existed have no
+`scripts/.okf-bootstrap.json`; run `bootstrap.mts <project> --tools-only` once from the new skill
+to create it. That run replaces every `scripts/okf-*` file, so commit first and check
+`git diff scripts/` for edits of your own. The `.okf-update/` folder and `scripts/*.new` files an
+apply leaves behind do not count as a dirty tree, so they never block the next update.
 
 ## How it works
 

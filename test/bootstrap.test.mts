@@ -4,6 +4,7 @@
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { after, describe, it } from 'node:test';
@@ -111,6 +112,66 @@ describe('bootstrap', () => {
   it('refuses --tools-only without a bundle', () => {
     const r = run(BOOTSTRAP, [project('empty'), '--tools-only']);
     assert.equal(r.code, 2);
+  });
+
+  it('writes an install manifest whose hashes match the generated scripts', () => {
+    const dir = project('manifest');
+    const r = run(BOOTSTRAP, [dir]);
+    assert.equal(r.code, 0, r.out);
+    const manifestPath = path.join(dir, 'scripts', '.okf-bootstrap.json');
+    const text = read(manifestPath);
+    assert.ok(text.endsWith('}\n'), 'trailing newline');
+    assert.equal(text, JSON.stringify(JSON.parse(text), null, 2) + '\n', '2-space indent');
+    const manifest = JSON.parse(text);
+    assert.equal(manifest.version, pkgOf(ROOT).version);
+
+    const generated = fs
+      .readdirSync(path.join(dir, 'scripts'))
+      .filter((f) => /^okf-.*\.(mts|mjs)$/.test(f))
+      .map((f) => `scripts/${f}`)
+      .sort();
+    assert.deepEqual(Object.keys(manifest.files), generated, 'every generated script, nothing else');
+    assert.deepEqual(Object.keys(manifest.files), [...Object.keys(manifest.files)].sort(), 'keys sorted');
+    for (const [rel, hash] of Object.entries<string>(manifest.files)) {
+      const actual = createHash('sha256').update(fs.readFileSync(path.join(dir, rel))).digest('hex');
+      assert.equal(hash, actual, `hash of ${rel}`);
+    }
+    const templates = path.join(ROOT, 'skills', 'okf-bootstrap', 'assets', 'templates');
+    assert.ok(Object.keys(manifest.templates).length >= 8, 'every scaffolded template');
+    for (const [rel, hash] of Object.entries<string>(manifest.templates)) {
+      const actual = createHash('sha256').update(fs.readFileSync(path.join(templates, rel))).digest('hex');
+      assert.equal(hash, actual, `hash of template ${rel}`);
+    }
+  });
+
+  it('rewrites the manifest on a re-run', () => {
+    const dir = project('manifest-rerun');
+    run(BOOTSTRAP, [dir]);
+    const manifestPath = path.join(dir, 'scripts', '.okf-bootstrap.json');
+    const original = read(manifestPath);
+    fs.writeFileSync(manifestPath, '{"version":"0.0.0","files":{}}\n');
+    const again = run(BOOTSTRAP, [dir]);
+    assert.equal(again.code, 0, again.out);
+    assert.equal(read(manifestPath), original);
+  });
+
+  it('writes the manifest with --no-scripts too, since the scripts are still refreshed', () => {
+    const dir = project('manifest-no-scripts');
+    const r = run(BOOTSTRAP, [dir, '--no-scripts']);
+    assert.equal(r.code, 0, r.out);
+    assert.ok(fs.existsSync(path.join(dir, 'scripts', 'okf-view.mts')), 'tools are still copied');
+    const manifest = JSON.parse(read(path.join(dir, 'scripts', '.okf-bootstrap.json')));
+    const view = createHash('sha256').update(fs.readFileSync(path.join(dir, 'scripts', 'okf-view.mts'))).digest('hex');
+    assert.equal(manifest.files['scripts/okf-view.mts'], view);
+    assert.equal(pkgOf(dir).scripts?.['okf:update'], undefined, 'package.json left alone');
+  });
+
+  it('adds the okf:update npm script', () => {
+    const dir = project('update-script');
+    const r = run(BOOTSTRAP, [dir]);
+    assert.equal(r.code, 0, r.out);
+    assert.equal(pkgOf(dir).scripts['okf:update'], 'node --import ./scripts/okf-start.mjs scripts/okf-update.mts');
+    assert.match(r.out, /npm run okf:update/);
   });
 
   it('scaffolds the widget package as a workspace, and never replaces it', () => {

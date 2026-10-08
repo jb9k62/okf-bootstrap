@@ -1,7 +1,18 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 - 2026-10-08
 
+- **`npm run okf:update`**: brings a project's generated tools (`scripts/okf-*`) up to a release.
+  A dry run by default; `--apply` refuses on a dirty git tree, fetches the release tag only, and
+  keeps any generated script you edited (the release's copy goes beside it as `<name>.new`).
+  Authored files are never overwritten; a template the release changed is written under
+  `.okf-update/` to diff by hand. The bootstrap now writes `scripts/.okf-bootstrap.json`, the
+  manifest it reads; run `bootstrap --tools-only` once in projects scaffolded earlier (it replaces
+  `scripts/okf-*`, so commit first). An apply backs up edited scripts to `.okf-update/backup/` first,
+  refuses an older release without `--allow-downgrade`, takes `--dir <project>`, ignores its own
+  leftovers (`.okf-update/`, `scripts/*.new`) when checking for a clean tree, and renders template
+  copies with the project's name (the manifest remembers it). A `--tools-only` run no longer brings
+  back an authoring template that was deleted.
 - **Viewer top bar decluttered**: search, the Graph/Tree/Table switch, Filters, Display, Reading and
   the theme stay visible. Search mode, type, trust and freshness move into a Filters panel with a
   count and removable chips; colour, layout and Neighbourhood move into a Display panel. Reset

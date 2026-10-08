@@ -8,7 +8,8 @@ description: >
   system behaves. Use when asked to "bootstrap an okf" or set up structured design docs, when
   writing a guided tour, tutorial or explainer of code or a change (especially agent-written
   code someone must understand before building on it), when adding a quiz or interactive
-  widget to docs, or when moving a bundle to a new OKF spec version.
+  widget to docs, when moving a bundle to a new OKF spec version, or when updating a project's
+  okf tools to a newer okf-bootstrap release.
 license: MIT
 compatibility: Node 24+ (runs TypeScript directly). npm. Chromium via playwright for the render gate.
 ---
@@ -50,7 +51,7 @@ node <skill dir>/assets/bootstrap.mts <targetDir> --name "Project Name" [--widge
 | `--slug` | Concept dir id (default: kebab-case of the name) |
 | `--widgets` | Also scaffold `packages/okf-widgets` (React micro-worlds), add it to the npm workspaces, and build it before `okf:view` and the render gate |
 | `--edukai` | Also scaffold `edukai/`, the agent memory bundle (see "Two bundles"), add the `edukai:` scripts, and write a short marked snippet into `AGENTS.md` once |
-| `--tools-only` | Refresh `scripts/okf-*.mts`, `scripts/okf-start.mjs` (the compile-cache preload the scripts load) and the `okf:` scripts only; add `--widgets` to add widgets, or `--edukai` to add the memory bundle, to a project that already has `okf/` |
+| `--tools-only` | Refresh `scripts/okf-*.mts`, `scripts/okf-start.mjs` (the compile-cache preload the scripts load) and the `okf:` scripts only; add `--widgets` to add widgets, or `--edukai` to add the memory bundle, to a project that already has `okf/`. Every run writes `scripts/.okf-bootstrap.json`, the manifest `okf:update` reads |
 | `--no-scripts` | Leave `package.json` alone |
 | `--force` | Replace the authored files (index, log, ADR index and template, authoring templates) with fresh templates. Never touches `packages/okf-widgets` |
 
@@ -93,6 +94,36 @@ refreshed, and older `.mjs` copies are removed.
    look, in light and dark: the gates prove it works, not that it reads well.
 5. **Commit** `okf/`, `scripts/`, `packages/okf-widgets/`, the two authoring templates and
    `package.json`. Gitignore `okf/viz.html` (generated).
+
+## Updating
+
+`npm run okf:update` brings a project's generated tools (`scripts/okf-*`) up to a release. It
+runs only when someone runs it: nothing checks for updates in the background.
+When asked to update:
+
+1. **Dry run.** `npm run okf:update` prints what would change between the installed version
+   and the release (default: the latest tag; `-- --ref vX.Y.Z` picks one), and the release's
+   `CHANGELOG.md` entries since the installed version. It fetches the tag into a temporary
+   folder, runs none of its code, and writes nothing in the project.
+2. **Summarise** the changes in plain words, from that changelog and the list of files.
+3. **Ask the user** before applying. Mention anything that needs their decision: a generated
+   script they edited (kept, with the upstream copy written beside it as `<name>.new`), and a
+   template the release changed (their file is never overwritten; the release's copy goes under
+   `.okf-update/` for a hand diff).
+4. **Apply** with `npm run okf:update -- --apply`. It refuses on a dirty git tree, so commit or
+   stash first and `git diff` is the undo. `--allow-dirty` only when the user asks for it. Applying an older release
+   needs `--allow-downgrade`, again only when asked; `--dir <project>` targets another directory.
+5. **Verify** with `npm run okf:validate`.
+
+Exit codes: **0** up to date, dry run ok, or applied. **1** `--apply` refused or could not
+complete (a dirty tree, a failed release bootstrap, or a backup left by an apply that did not
+finish), and the report names what needs a person. **2** could not run (offline, no git, no such
+tag, no manifest).
+
+A project scaffolded before this feature has no `scripts/.okf-bootstrap.json` and no
+`okf:update` script. Run `node <skill dir>/assets/bootstrap.mts . --tools-only` once from the new
+skill to add both. That run replaces every `scripts/okf-*` file, edited or not, so commit first and
+check `git diff scripts/` for local edits to carry over.
 
 ## Two bundles
 

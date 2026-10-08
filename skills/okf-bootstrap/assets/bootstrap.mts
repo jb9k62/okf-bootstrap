@@ -18,6 +18,9 @@
  *   scripts/okf-edukai-hook.mts : what the harness hooks run, and lesson states (copied verbatim)
  *   scripts/okf-start.mjs     : loaded first by every npm script: Node's compile cache, so a
  *                               tool's TypeScript is stripped once and not on every run
+ *   scripts/okf-update.mts    : brings these tools up to a later release (copied verbatim)
+ *   scripts/.okf-bootstrap.json : the install manifest: version, and the sha256 of each generated
+ *                               script and of each template, which okf-update.mts compares
  *   edukai/index.md, log.md   : with --edukai, the memory bundle: what agents have learned
  *   AGENTS.md                 : with --edukai, a short marked snippet pointing agents at it
  *   okf-concept-template.md   : authoring aid for a reference concept (outside the bundle)
@@ -51,6 +54,7 @@
  *   --force       Overwrite authored files with the templates again. This throws away
  *                 hand-written content, including log.md's history.
  */
+import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -59,9 +63,25 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATES = path.join(HERE, 'templates');
 // The producer stamped into scaffolded frontmatter (OKF actor convention: <producer>/<version>).
 // Kept equal to package.json's version by the test suite.
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 const TOOLS = ['okf-view', 'okf-mermaid', 'okf-search', 'okf-core', 'okf-rank', 'okf-edukai', 'okf-edukai-hook'] as const;
 const LEGACY_MJS: readonly string[] = ['okf-view', 'okf-mermaid'];
+const UPDATE_TOOL = 'okf-update';
+// Written into the target on every run that refreshes scripts/: which generated files came from
+// this bootstrap, and their sha256, so a later run can tell generated content from edits.
+const MANIFEST = path.join('scripts', '.okf-bootstrap.json');
+// The templates the manifest records, keyed by their path under templates/. okf-update.mts has
+// the same list (TEMPLATE_MAP), with where each is scaffolded.
+const MANIFEST_TEMPLATES: readonly string[] = [
+  'okf/index.md',
+  'okf/log.md',
+  'okf/adr/readme.md',
+  'okf/adr/template.md',
+  'edukai/index.md',
+  'edukai/log.md',
+  'concept.md',
+  'explainer.md',
+];
 const WIDGETS_DIR = 'packages/okf-widgets';
 const WIDGETS_PKG = 'okf-widgets';
 // The snippet is written into AGENTS.md once; this marker is how a re-run knows it is there.
@@ -137,6 +157,10 @@ function copyFile(src: string, dest: string): void {
   fs.copyFileSync(src, dest);
 }
 
+function sha256(file: string): string {
+  return createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+
 function writeRendered(src: string, dest: string, vars: Vars): void {
   const text = fs.readFileSync(src, 'utf8');
   fs.mkdirSync(path.dirname(dest), { recursive: true });
@@ -186,7 +210,17 @@ if (!fs.existsSync(target)) {
   console.error(`Target dir not found: ${target}`);
   process.exit(2);
 }
-const name = opts.name ?? path.basename(target);
+// A project keeps the name it was scaffolded with: the manifest remembers it, so a re-run (or an
+// update) renders templates with the same PROJECT_NAME and not the folder's name.
+function previousManifest(): { name?: string } | null {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(target, MANIFEST), 'utf8')) as { name?: string };
+  } catch {
+    return null;
+  }
+}
+const previous = previousManifest();
+const name = opts.name ?? (typeof previous?.name === 'string' ? previous.name : path.basename(target));
 const slug = opts.slug ?? kebab(name);
 const vars: Vars = {
   PROJECT_NAME: name,
@@ -257,13 +291,39 @@ for (const tool of TOOLS) {
     removed.push(shortPath(legacy));
   }
 }
+const generated = ['okf-start.mjs', ...TOOLS.map((tool) => `${tool}.mts`)];
+// okf-update is copied only when this bootstrap ships its source.
+const updateSrc = path.join(HERE, `${UPDATE_TOOL}.mts`);
+if (fs.existsSync(updateSrc)) {
+  copyFile(updateSrc, path.join(target, 'scripts', `${UPDATE_TOOL}.mts`));
+  generated.push(`${UPDATE_TOOL}.mts`);
+}
 // The authoring templates are aids people edit, so they follow the bundle content's rule.
 for (const [template, dest] of [
   ['concept.md', 'okf-concept-template.md'],
   ['explainer.md', 'okf-explainer-template.md'],
 ] as const) {
+  // A tools-only run on a project that has been bootstrapped before (it has a manifest) does not
+  // bring back an aid someone deleted.
+  if (opts.toolsOnly && previous !== null) continue;
   const out = path.join(target, dest);
   writeUnlessPresent(out, () => copyFile(path.join(TEMPLATES, template), out));
+}
+
+// The manifest lists the generated scripts with the hash of what was written, keys sorted, and
+// the hash of each template this version ships, so okf-update can tell which ones a release
+// changed. It is generated, so it is always overwritten, like the scripts it describes (which
+// --no-scripts refreshes too; that flag is about package.json).
+{
+  const files: Record<string, string> = {};
+  for (const name of [...generated].sort()) {
+    files[`scripts/${name}`] = sha256(path.join(target, 'scripts', name));
+  }
+  const templates: Record<string, string> = {};
+  for (const rel of MANIFEST_TEMPLATES) {
+    if (fs.existsSync(path.join(TEMPLATES, rel))) templates[rel] = sha256(path.join(TEMPLATES, rel));
+  }
+  fs.writeFileSync(path.join(target, MANIFEST), JSON.stringify({ version: VERSION, name, files, templates }, null, 2) + '\n');
 }
 
 // --- widgets ------------------------------------------------------------------
@@ -294,6 +354,7 @@ if (opts.scripts) {
       pkg.scripts['okf:search'] = 'node --import ./scripts/okf-start.mjs scripts/okf-search.mts';
       pkg.scripts['okf:mermaid:render'] = build + 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --check-render';
       pkg.scripts['okf:recheck'] = 'node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts recheck --bundle okf';
+      pkg.scripts['okf:update'] = 'node --import ./scripts/okf-start.mjs scripts/okf-update.mts';
       if (hasEdukai) {
         pkg.scripts['edukai:validate'] =
           'node --import ./scripts/okf-start.mjs scripts/okf-view.mts edukai --validate --strict && node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index --check';
@@ -355,6 +416,7 @@ console.log('  scripts/okf-rank.mts       (the ranking, also run in the viewer) 
 console.log('  scripts/okf-edukai.mts     (lessons, pins and re-checks)          refreshed');
 console.log('  scripts/okf-edukai-hook.mts (harness hooks, lesson states)        refreshed');
 console.log('  scripts/okf-start.mjs      (compile cache, loaded by the scripts) refreshed');
+if (fs.existsSync(updateSrc)) console.log('  scripts/okf-update.mts     (updates these tools to a release)     refreshed');
 if (opts.edukai) console.log('  edukai/                    (the agent memory bundle: lessons are added as agents learn)');
 if (created.length) {
   console.log('\nCreated:');
@@ -379,6 +441,7 @@ console.log('  npm run okf:mermaid         # every mermaid block parses (needs m
 console.log('  npm run okf:mermaid:render  # every diagram, quiz and widget works in the viewer');
 console.log('  npm run okf:search -- search "query"   # find concepts before reading them');
 console.log('  npm run okf:recheck         # do the files that concepts cite still say what was pinned?');
+console.log('  npm run okf:update          # what a newer release would change in the tools (-- --apply to do it)');
 if (hasEdukai) {
   console.log('\nMemory bundle (edukai/):');
   console.log('  npm run edukai:index        # rebuild the syllabus and the cache the hooks read (run once after a clone)');

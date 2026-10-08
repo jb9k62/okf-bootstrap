@@ -15,12 +15,14 @@ scripts, demo, docs) supports them.
 | `skills/okf-bootstrap/assets/okf-view.mts` | Validator + graph viewer; emits one self-contained `viz.html` (~3000 lines) |
 | `skills/okf-bootstrap/assets/okf-mermaid.mts` | Mermaid parse gate and headless-Chromium render gate |
 | `skills/okf-bootstrap/assets/okf-search.mts` | Ranked, freshness-aware search (`search`, `show`, `related`, `facets`, `stale`) with an on-disk cache |
-| `skills/okf-bootstrap/assets/okf-rank.mts` | The ranking: pure, no imports. Run by `okf-search` and inlined (types stripped) into `viz.html` for its search box |
-| `skills/okf-bootstrap/assets/okf-core.mts` | Parsing shared by the viewer and search: frontmatter, trust tier, staleness, links |
+| `skills/okf-bootstrap/assets/okf-rank.mts` | The ranking and its inverted index: pure, no imports. Run by `okf-search` and inlined (types stripped) into `viz.html` for its search box |
+| `skills/okf-bootstrap/assets/okf-core.mts` | Parsing shared by the viewer and search: frontmatter, trust tier, staleness, links. Loads `yaml` on the first parse, so a search answered from its cache never loads it |
 | `skills/okf-bootstrap/assets/okf-edukai.mts` | The memory bundle's tool: `new`, `verify`, `supersede`, `index`, `recheck`. Writes the cache the hooks read |
+| `skills/okf-bootstrap/assets/okf-start.mjs` | Copied as `scripts/okf-start.mjs` and loaded first by every scaffolded npm script: Node's compile cache, so the tools' TypeScript is stripped once |
 | `skills/okf-bootstrap/assets/okf-edukai-hook.mts` | What the harness adapters run (`brief`, `cites`, `debt`, `hook`) and the code that derives a lesson's state. No dependencies |
 | `skills/edukai/SKILL.md` | The memory skill: what is worth a lesson, how sure we are, what to do with one that failed its re-check |
 | `hooks/hooks.json`, `hooks/edukai-hook.mjs` | Claude Code adapter: on SessionStart, PostToolUse and Stop it runs the launcher, plain JavaScript that exits quietly on a Node too old for TypeScript and otherwise calls `okf-edukai-hook.mts` |
+| `hooks/compile-cache.mjs` | Loaded first by both adapters: turns on Node's compile cache in a private per-user folder, so the hook's TypeScript is stripped once and not on every call |
 | `extensions/edukai.ts` | pi adapter: the same three moments. Declares the few pi types it uses |
 | `skills/okf-bootstrap/assets/templates/` | Files copied into target projects (`okf/`, concept and explainer templates, `okf-widgets/` React workspace) |
 | `skills/okf-bootstrap/references/` | `PLAYBOOK.md`, `EXPLAINERS.md`, and the vendored OKF spec |
@@ -58,6 +60,9 @@ do not prove it reads well.
 
 - **Erasable TypeScript only**: no enums, namespaces or parameter properties. Imports name
   the real `.mts` extension. `tsconfig.json` enforces this.
+- **npm scripts start through `okf-start.mjs`** (`node --import ./scripts/okf-start.mjs scripts/okf-….mts`):
+  plain JavaScript that turns on Node's compile cache in a private folder. Keep it free of
+  TypeScript and of imports beyond `node:` built-ins; a tool must still run without it.
 - **Tools must stay dependency-light.** `bootstrap.mts`, `okf-view.mts`, `okf-mermaid.mts`,
   `okf-search.mts`, `okf-core.mts`, `okf-rank.mts`, `okf-edukai.mts` and `okf-edukai-hook.mts` are copied into user projects as `scripts/okf-*.mts`. Don't import anything from outside
   `skills/okf-bootstrap/assets/`, and resolve templates relative to the file itself.

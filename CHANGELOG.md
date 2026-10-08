@@ -35,6 +35,41 @@
   and the report prints the confidence breakdown.
 - **Search knows lessons**: `--confidence tested|observed|inferred`, and a superseded concept's
   badge says what replaced it.
+- **Search finds more of what was meant**: a query word now finds its other forms ("boxes" and
+  "box", "caching" and "cache", "retried" and "retry"), a camelCase word by its parts or as one
+  word ("GitHub", "git hub", "github"), and an accented word without its accents. A word the
+  bundle does not hold is tried as a prefix and then as a near spelling ("jiter"), at a lower
+  weight. Words a question is asked with ("how", "the") are ignored beside real ones. Ranking
+  now puts the concept a query names above pages that only mention it: link targets and HTML
+  comments no longer count as text, a word's forms share one rarity, and a single mention in a
+  short body no longer scores like a match in the title. On the demo's 70 judged queries the
+  right concept's mean reciprocal rank went from 0.88 to 0.95. Scores shown by `--explain` are
+  on a new scale.
+- **Search by cited file**: the files a concept names in `sources` and `check` are indexed, so
+  `search "poller.ts"` finds the lessons that rest on it, and `search --cites <file-or-folder>`
+  lists exactly those. The hooks' "and N more" line now points at it.
+- **Faster search**: the cache is an inverted index, and `yaml` is loaded only when a file has
+  to be re-read. A warm search of a 3,000-concept bundle went from about 560 ms to 250 ms, and
+  of the demo from about 235 ms to 185 ms; one changed file re-reads one file. `show` takes the
+  end of an id ("retry-policy") when one concept ends that way. Without `yaml` installed it
+  exits 2 and says so, instead of failing with a module error.
+- **Faster start for every tool**: the scaffolded npm scripts now load `scripts/okf-start.mjs`
+  first (`node --import ./scripts/okf-start.mjs scripts/okf-search.mts`), which turns on Node's
+  compile cache under `node_modules/.cache/okf-compile`. On the demo a cached search takes about
+  85 ms instead of 185 ms, a re-check 110 ms instead of 265 ms, and a validation 110 ms instead
+  of 180 ms. Re-run the scaffold (`--tools-only`) to get the file and the new scripts; the old
+  scripts keep working.
+- **Faster, steadier memory hooks**: both adapters start the hook through Node's compile cache,
+  kept in a private per-user folder, so a hook call on the demo costs about 50 ms instead of 120 ms. A
+  `matches` check that backtracks without end is stopped after 200 ms and reported as failed,
+  instead of stalling every read until the harness's timeout. A lesson edited by hand after
+  the index was built is named as such, and one whose file was deleted is no longer cited or
+  counted as debt. The Claude Code hook now also sees `NotebookEdit`.
+- **Fixed**: `--flag` followed by another `--flag` took the second as its value in `okf-search`
+  and the edukai tools (it now says the value is missing; `--flag=--value` still passes one).
+  `okf-edukai new` writes nothing until the lesson is known to be valid, and two `new` commands
+  racing on one domain no longer collide on its overview stub. Search snippets keep inline code
+  and show the part of a long line that matched.
 - **Demo**: Parcel tracker gains a memory bundle (`examples/demo/edukai`, nine lessons, two wrong
   on purpose), a few source files for them to cite, ADR-0004, a tour of the lesson lifecycle,
   a reference concept on how the memory is laid out, searched and kept true

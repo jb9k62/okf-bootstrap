@@ -600,7 +600,7 @@ describe('okf-edukai-hook: brief, cites, debt and the session file', () => {
         '- [tested] Lesson 1 (edukai/codebase-x/lessons/2026-10-02-l1.md)',
         '- [inferred] Lesson 2 (edukai/codebase-x/lessons/2026-10-02-l2.md)',
         '- [tested] Lesson 3 (edukai/codebase-x/lessons/2026-10-02-l3.md)',
-        '- and 2 more: npm run edukai:search -- search "a.ts"',
+        '- and 2 more: npm run edukai:search -- search --cites "src/a.ts"',
         '',
       ].join('\n'),
     );
@@ -748,6 +748,68 @@ describe('okf-edukai-hook: brief, cites, debt and the session file', () => {
   });
 });
 
+describe('okf-edukai-hook: checks that cannot finish, and lessons the index no longer describes', () => {
+  it('stops a `matches` check that backtracks without end, and reports it as failed', () => {
+    const cwd = project('slow-regex', { 'src/a.txt': 'a'.repeat(40) + '!\n', 'src/b.ts': 'RETRIES = 5\n' });
+    lesson(cwd, { slug: 'fast', title: 'A quick check', sources: ['src/b.ts'], checks: ['{ file: src/b.ts, matches: "RETRIES = \\\\d+" }'], verify: 'tested' });
+    const slow = lesson(cwd, { slug: 'slow', title: 'A runaway check', sources: ['src/a.txt'], verify: false });
+    const file = path.join(cwd, slow);
+    fs.writeFileSync(file, read(file).replace(/\n---\n/, '\ncheck:\n  - { file: src/a.txt, matches: "^(a+)+$" }\n---\n'));
+
+    const started = Date.now();
+    const r = edukai(cwd, ['recheck', '--now', NOW]);
+    assert.equal(r.code, 0, r.all);
+    assert.match(r.out, /2026-10-02-slow\.md {2}\[failed\] check \/\^\(a\+\)\+\$\/ took over 200 ms to run on src\/a\.txt; write a simpler expression/);
+    assert.doesNotMatch(r.out, /2026-10-02-fast\.md {2}\[/, 'an ordinary expression still holds');
+    assert.equal(edukai(cwd, ['verify', slow, '--by', ME, '--now', NOW]).code, 1, 'and it cannot be verified');
+
+    // The hook meets the same lesson on every read of the file: it must answer, not hang.
+    const cited = hook(cwd, ['cites', 'src/a.txt', '--now', NOW]);
+    assert.equal(cited.code, 0, cited.all);
+    assert.match(cited.out, /\[failed · inferred\] A runaway check .*took over 200 ms/);
+    assert.match(hook(cwd, ['brief', '--now', NOW]).out, /Needs an agent: 1 failed/);
+    assert.ok(Date.now() - started < 20_000, 'four runs, each bounded');
+  });
+
+  it('says so when a lesson was edited after the index was built, and drops one whose file is gone', () => {
+    const cwd = project('edited-since', { 'src/a.ts': 'V = 1\n' });
+    const kept = lesson(cwd, { slug: 'kept', title: 'Kept as it was', sources: ['src/a.ts'], checks: ['{ file: src/a.ts, contains: "V = 1" }'] });
+    const edited = lesson(cwd, { slug: 'edited', title: 'Edited by hand', sources: ['src/a.ts'], checks: ['{ file: src/a.ts, contains: "V = 1" }'] });
+    const gone = lesson(cwd, { slug: 'gone', title: 'Deleted by hand', sources: ['src/a.ts'], checks: ['{ file: src/a.ts, contains: "V = 1" }'] });
+    assert.ok(kept);
+
+    // By hand, with no okf-edukai command after: the index still describes the old files.
+    fs.appendFileSync(path.join(cwd, edited), '\nA line added by hand.\n');
+    fs.rmSync(path.join(cwd, gone));
+    const note = /\(this lesson was edited after the index was built: run npm run edukai:index\)/;
+    const lines = hook(cwd, ['cites', 'src/a.ts', '--session', 's1']).out.trim().split('\n');
+    assert.equal(lines.length, 3, lines.join('\n'));
+    assert.match(lines[1]!, /Edited by hand/);
+    assert.match(lines[1]!, note);
+    assert.match(lines[2]!, /Kept as it was \(edukai\/codebase-x\/lessons\/2026-10-02-kept\.md\)$/);
+
+    // The session breaks all three checks: the deleted lesson is no debt, the edited one is named as such.
+    write(cwd, 'src/a.ts', 'V = 2\n');
+    hook(cwd, ['cites', 'src/a.ts', '--edited', '--session', 's1']);
+    const debt = hook(cwd, ['debt', '--session', 's1']).out;
+    assert.match(debt, /^edukai: your changes left 2 lessons wrong/);
+    assert.doesNotMatch(debt, /Deleted by hand/);
+    assert.match(debt.split('\n').find((l) => l.includes('Edited by hand'))!, note);
+    assert.doesNotMatch(debt.split('\n').find((l) => l.includes('Kept as it was'))!, note);
+
+    // Once the index is rebuilt, nothing is out of date and nothing is said about it.
+    edukai(cwd, ['index']);
+    assert.doesNotMatch(hook(cwd, ['cites', 'src/a.ts', '--session', 's2']).out, /Deleted by hand|after the index was built/);
+  });
+
+  it('pins the same digest for a file with and without carriage returns', async () => {
+    const { digestOf } = await import(pathToFileURL(HOOK).href);
+    assert.equal(digestOf(Buffer.from('a\r\nb\r\n')), digestOf(Buffer.from('a\nb\n')));
+    assert.notEqual(digestOf(Buffer.from('a\rb\n')), digestOf(Buffer.from('a\nb\n')), 'a lone CR is not a line ending');
+    assert.match(digestOf(Buffer.from('')), /^sha256:e3b0c44298fc1c14$/);
+  });
+});
+
 describe('okf-edukai-hook: the dependency rule', () => {
   it('imports nothing but node: built-ins and ./okf-rank.mts', () => {
     const source = read(HOOK);
@@ -769,13 +831,18 @@ describe('okf-edukai-hook: the dependency rule', () => {
     write(proj, 'edukai/index.md', '# Memory\n');
     write(proj, 'src/a.ts', 'RETRIES = 4\n');
     const key = crypto.createHash('sha1').update(path.join(proj, 'edukai')).digest('hex').slice(0, 12);
+    // The lesson's file, as the cache describes it: the hooks say nothing of a lesson whose file is gone.
+    const lessonRel = 'codebase-x/lessons/2026-10-02-a.md';
+    write(proj, `edukai/${lessonRel}`, '---\ntype: Lesson\n---\n');
+    const st = fs.statSync(path.join(proj, 'edukai', lessonRel));
+    const hash = crypto.createHash('sha1').update(fs.readFileSync(path.join(proj, 'edukai', lessonRel))).digest('hex').slice(0, 16);
     write(
       proj,
       `node_modules/.cache/edukai/${key}.json`,
       JSON.stringify({
         schema: 1,
         written: Date.now(),
-        files: {},
+        files: { [lessonRel]: { size: st.size, mtime: st.mtimeMs, ctime: st.ctimeMs, hash } },
         domains: [{ id: 'codebase-x', title: 'X', description: 'About x.', lessons: 1 }],
         lessons: [{ id: 'codebase-x/lessons/2026-10-02-a', title: 'Five retries', confidence: 'tested', status: 'stable', stale_after: '2099-01-01T00:00:00Z', sources: [{ path: 'src/a.ts', digest: 'sha256:0000000000000000' }], checks: [{ file: 'src/a.ts', contains: 'RETRIES = 5' }] }],
       }),
@@ -962,7 +1029,7 @@ describe('hooks/hooks.json', () => {
 
   it('runs the hook file, which exists, on the four moments', () => {
     assert.deepEqual(Object.keys(config.hooks).sort(), ['PostToolUse', 'SessionStart', 'Stop']);
-    assert.deepEqual(config.hooks.PostToolUse.map((g: { matcher: string }) => g.matcher), ['Read', 'Edit|Write']);
+    assert.deepEqual(config.hooks.PostToolUse.map((g: { matcher: string }) => g.matcher), ['Read', 'Edit|Write|NotebookEdit']);
     assert.equal(config.hooks.SessionStart[0].matcher, undefined, 'every session source, compaction included');
     let commands = 0;
     for (const groups of Object.values(config.hooks) as Array<Array<{ hooks: Array<{ type: string; command: string; timeout: number }> }>>) {
@@ -987,7 +1054,9 @@ describe('hooks/hooks.json', () => {
     // It must parse on a Node too old to run TypeScript, so that it can exit quietly there.
     assert.doesNotMatch(source, /^import .* from|\bawait\b|: (string|number)\b|\?\?|\?\./m, 'only syntax an old Node parses');
     assert.match(source, /major < 22 \|\| \(major === 22 && minor < 18\)/);
-    assert.ok(fs.existsSync(path.resolve(path.dirname(launcher), source.match(/import\('([^']+)'\)/)![1]!)));
+    const imported = [...source.matchAll(/import\('([^']+)'\)/g)].map((m) => m[1]!);
+    assert.deepEqual(imported, ['./compile-cache.mjs', '../skills/okf-bootstrap/assets/okf-edukai-hook.mts']);
+    for (const file of imported) assert.ok(fs.existsSync(path.resolve(path.dirname(launcher), file)), file);
     const cwd = fs.realpathSync(project('launcher', { 'src/a.ts': 'a\n' }));
     lesson(cwd, { slug: 'one', title: 'Through the launcher', sources: ['src/a.ts'] });
     const r = run(launcher, [], cwd, { input: JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Read', session_id: 's', cwd, tool_input: { file_path: path.join(cwd, 'src/a.ts') } }), env: { CLAUDE_PROJECT_DIR: cwd } });
@@ -995,6 +1064,33 @@ describe('hooks/hooks.json', () => {
     assert.match(JSON.parse(r.out).hookSpecificOutput.additionalContext, /Through the launcher/);
     const bad = run(launcher, [], cwd, { input: '{ not json', env: { CLAUDE_PROJECT_DIR: cwd } });
     assert.deepEqual([bad.code, bad.all], [0, '']);
+  });
+
+  it('keeps the stripped hook in a compile cache that is private, or not at all', { skip: process.platform === 'win32' }, () => {
+    const launcher = path.join(ROOT, 'hooks', 'edukai-hook.mjs');
+    const cwd = fs.realpathSync(project('compile-cache', { 'src/a.ts': 'a\n' }));
+    lesson(cwd, { slug: 'one', title: 'Cached start', sources: ['src/a.ts'] });
+    const input = JSON.stringify({ hook_event_name: 'PostToolUse', tool_name: 'Read', cwd, tool_input: { file_path: path.join(cwd, 'src/a.ts') } });
+    const ours = `edukai-${process.getuid!()}`;
+    const at = (tmp: string) => run(launcher, [], cwd, { input, env: { CLAUDE_PROJECT_DIR: cwd, TMPDIR: tmp, EDUKAI_DEBUG: '1' } });
+
+    const tmp = fs.mkdtempSync(path.join(outside, 'tmp-'));
+    for (let i = 0; i < 2; i++) {
+      const r = at(tmp);
+      assert.equal(r.err, '', 'the second run reads the cache the first one wrote');
+      assert.match(JSON.parse(r.out).hookSpecificOutput.additionalContext, /Cached start/);
+    }
+    assert.equal(fs.statSync(path.join(tmp, ours)).mode & 0o777, 0o700);
+    const cached = fs.readdirSync(path.join(tmp, ours, 'compile'), { recursive: true });
+    assert.ok(cached.length > 1, 'Node wrote its compile cache there');
+
+    // A folder of that name that others can write to could hold planted code: it is not used.
+    const shared = fs.mkdtempSync(path.join(outside, 'tmp-'));
+    fs.mkdirSync(path.join(shared, ours), { mode: 0o777 });
+    fs.chmodSync(path.join(shared, ours), 0o777);
+    const r = at(shared);
+    assert.match(JSON.parse(r.out).hookSpecificOutput.additionalContext, /Cached start/, 'the hook still answers');
+    assert.equal(fs.existsSync(path.join(shared, ours, 'compile')), false);
   });
 });
 
@@ -1038,6 +1134,14 @@ describe('the pi adapter: extensions/edukai.ts', () => {
     assert.ok(rel, 'the extension resolves the hook file relative to itself');
     assert.equal(path.resolve(ROOT, 'extensions', rel!), HOOK);
     assert.doesNotMatch(source, /from ['"]@|from ['"]pi/, 'no dependency on pi: it declares the types it uses');
+  });
+
+  it('starts the hook file behind the compile cache', async () => {
+    const cwd = project('pi-compile-cache', { 'src/a.ts': 'a\n' });
+    const pi = await load(cwd);
+    await pi.fire('session_start');
+    assert.deepEqual(pi.calls[0]!.slice(0, 4), ['--import', pathToFileURL(path.join(ROOT, 'hooks', 'compile-cache.mjs')).href, HOOK, 'brief']);
+    assert.match(pi.sent[0]!.message.content, /^edukai: /);
   });
 
   it('briefs at session start and after compaction, and declares the prefix in the system prompt', async () => {
@@ -1224,31 +1328,52 @@ describe('bootstrap --edukai', () => {
   }
   const scripts = (dir: string) => JSON.parse(read(path.join(dir, 'package.json'))).scripts as Record<string, string>;
   const EDUKAI_SCRIPTS = {
-    'edukai:validate': 'node scripts/okf-view.mts edukai --validate --strict && node scripts/okf-edukai.mts index --check',
-    'edukai:index': 'node scripts/okf-edukai.mts index',
-    'edukai:recheck': 'node scripts/okf-edukai.mts recheck',
-    'edukai:brief': 'node scripts/okf-edukai.mts index && node scripts/okf-edukai-hook.mts brief',
-    'edukai:search': 'node scripts/okf-search.mts --bundle edukai',
-    'edukai:view': 'node scripts/okf-view.mts edukai',
+    'edukai:validate': 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts edukai --validate --strict && node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index --check',
+    'edukai:index': 'node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index',
+    'edukai:recheck': 'node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts recheck',
+    'edukai:brief': 'node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index && node --import ./scripts/okf-start.mjs scripts/okf-edukai-hook.mts brief',
+    'edukai:search': 'node --import ./scripts/okf-start.mjs scripts/okf-search.mts --bundle edukai',
+    'edukai:view': 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts edukai',
   };
   /** Run an npm script's command line without npm, one `&&` step at a time. */
   function npmRun(dir: string, name: string, extra: string[] = []) {
     let last = { code: 0 as number | null, out: '', err: '', all: '' };
     const steps = scripts(dir)[name]!.split(' && ');
     for (const [i, step] of steps.entries()) {
-      const [, file, ...args] = step.split(' ');
-      last = run(path.join(dir, file!), [...args, ...(i === steps.length - 1 ? extra : [])], dir);
+      // Everything after `node`, as npm would pass it: the preload first, then the tool.
+      const [, first, ...args] = step.split(' ');
+      last = run(first!, [...args, ...(i === steps.length - 1 ? extra : [])], dir);
       if (last.code !== 0) break;
     }
     return last;
   }
+
+  it('starts every npm script through the compile cache, which lands under node_modules', () => {
+    const dir = target('preload');
+    assert.equal(run(BOOTSTRAP, [dir, '--edukai'], ROOT).code, 0);
+    for (const [name, script] of Object.entries(scripts(dir))) {
+      for (const step of script.split(' && ')) {
+        if (step.startsWith('node ')) assert.match(step, /^node --import \.\/scripts\/okf-start\.mjs scripts\/okf-[a-z-]+\.mts\b/, name);
+      }
+    }
+    const start = read(path.join(dir, 'scripts', 'okf-start.mjs'));
+    assert.doesNotMatch(start, /from '(?!node:)/, 'it loads before anything can be stripped or installed');
+    fs.mkdirSync(path.join(dir, 'node_modules'));
+    fs.symlinkSync(path.join(ROOT, 'node_modules', 'yaml'), path.join(dir, 'node_modules', 'yaml'));
+    assert.equal(npmRun(dir, 'edukai:index').code, 0);
+    const r = npmRun(dir, 'okf:search', ['facets']);
+    assert.equal(r.code, 0, r.all);
+    assert.ok(fs.readdirSync(path.join(dir, 'node_modules', '.cache', 'okf-compile'), { recursive: true }).length > 1);
+    // Without the preload a tool runs the same.
+    assert.equal(run(path.join(dir, 'scripts', 'okf-search.mts'), ['facets'], dir).out, r.out);
+  });
 
   it('always copies the two tools and adds okf:recheck, but no memory bundle unless asked', () => {
     const dir = target('plain');
     const r = run(BOOTSTRAP, [dir], ROOT);
     assert.equal(r.code, 0, r.all);
     for (const tool of ['okf-edukai.mts', 'okf-edukai-hook.mts']) assert.ok(fs.existsSync(path.join(dir, 'scripts', tool)), tool);
-    assert.equal(scripts(dir)['okf:recheck'], 'node scripts/okf-edukai.mts recheck --bundle okf');
+    assert.equal(scripts(dir)['okf:recheck'], 'node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts recheck --bundle okf');
     assert.equal(scripts(dir)['edukai:index'], undefined);
     assert.ok(!fs.existsSync(path.join(dir, 'edukai')));
     assert.ok(!fs.existsSync(path.join(dir, 'AGENTS.md')));

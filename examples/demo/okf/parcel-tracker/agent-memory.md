@@ -116,11 +116,13 @@ score by what the frontmatter says.
 | Path | 3 |
 | Description | 2.5 |
 | Headings | 2 |
+| Files it cites (`sources`, `check`) | 3 |
 | Body | 1 |
 
-Plurals are trimmed, so "tests" finds "test". A word that appears nowhere in the bundle is
-tried as the start of a longer word, at a lower weight. A rare word counts for more than a
-common one.
+Plurals are trimmed, so "tests" finds "test", and a word finds its other forms, so "caching"
+finds "cache". A word that appears nowhere in the bundle is tried as the start of a longer
+word, then as a near spelling of one, each at a lower weight. Words a question is asked with
+("how", "the") are ignored beside real ones. A rare word counts for more than a common one.
 
 **The adjustments.** Each is a multiplier on the word score. Nothing is hidden: a lesson that
 is out of date or replaced is still found, lower down and labelled.
@@ -139,15 +141,16 @@ results.
 
 | Result | Word score | Adjustments | Score |
 | --- | --- | --- | --- |
-| CI runs tests via btest, not make | 1.12 | 1.05 (agent-verified), 1.04 (one link) | 1.22 |
-| Parcel tracker's tooling, the overview | 1.04 | none | 1.04 |
-| Tests run via make test | 1.19 | 0.6 (stale), 0.5 (deprecated), 1.05, 1.04 | 0.39 |
+| CI runs tests via btest, not make | 0.86 | 1.05 (agent-verified), 1.04 (one link) | 0.94 |
+| Parcel tracker's tooling, the overview | 0.66 | none | 0.66 |
+| Tests run via make test | 1.06 | 0.6 (stale), 0.5 (deprecated), 1.05, 1.04 | 0.35 |
 
 The replaced lesson has the best words of the three, because "tests" opens its title. It
 still comes last, and its result line names the lesson that replaced it.
 
 **Narrowing.** `--type Lesson` drops the overviews, `--confidence tested` keeps only what an
-agent reproduced, `--tag poller` keeps one tag, and `--fresh` drops anything past its date.
+agent reproduced, `--tag poller` keeps one tag, `--fresh` drops anything past its date, and
+`--cites examples/demo/src/poller` keeps the lessons that rest on a file under that folder.
 `facets` lists the tags, types and trust tiers in use, which is the place to start.
 
 > [!tip] A stale or unverified result is a lead

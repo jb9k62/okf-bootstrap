@@ -16,6 +16,8 @@
  *   scripts/okf-rank.mts      : the ranking, shared by search and the viewer's search box (copied verbatim)
  *   scripts/okf-edukai.mts    : lessons, pins and re-checks for the memory bundle (copied verbatim)
  *   scripts/okf-edukai-hook.mts : what the harness hooks run, and lesson states (copied verbatim)
+ *   scripts/okf-start.mjs     : loaded first by every npm script: Node's compile cache, so a
+ *                               tool's TypeScript is stripped once and not on every run
  *   edukai/index.md, log.md   : with --edukai, the memory bundle: what agents have learned
  *   AGENTS.md                 : with --edukai, a short marked snippet pointing agents at it
  *   okf-concept-template.md   : authoring aid for a reference concept (outside the bundle)
@@ -244,6 +246,7 @@ const hasEdukai = fs.existsSync(path.join(edukai, 'index.md'));
 // The scripts are generated copies, so they are always refreshed; that is the point of
 // --tools-only. A project bootstrapped before the tools became TypeScript has .mjs copies;
 // they are removed so there is one copy of each tool, and package.json points at the new one.
+copyFile(path.join(HERE, 'okf-start.mjs'), path.join(target, 'scripts', 'okf-start.mjs'));
 for (const tool of TOOLS) {
   copyFile(path.join(HERE, `${tool}.mts`), path.join(target, 'scripts', `${tool}.mts`));
   // Only the two tools that once shipped as .mjs have a legacy copy; a project's own
@@ -284,21 +287,21 @@ if (opts.scripts) {
       const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
       pkg.scripts = pkg.scripts || {};
       const build = hasWidgets ? 'npm run okf:widgets:build && ' : '';
-      pkg.scripts['okf:validate'] = 'node scripts/okf-view.mts okf --validate';
-      pkg.scripts['okf:fix'] = 'node scripts/okf-view.mts okf --validate --fix';
-      pkg.scripts['okf:view'] = build + 'node scripts/okf-view.mts okf';
-      pkg.scripts['okf:mermaid'] = 'node scripts/okf-mermaid.mts okf';
-      pkg.scripts['okf:search'] = 'node scripts/okf-search.mts';
-      pkg.scripts['okf:mermaid:render'] = build + 'node scripts/okf-view.mts okf --check-render';
-      pkg.scripts['okf:recheck'] = 'node scripts/okf-edukai.mts recheck --bundle okf';
+      pkg.scripts['okf:validate'] = 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --validate';
+      pkg.scripts['okf:fix'] = 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --validate --fix';
+      pkg.scripts['okf:view'] = build + 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf';
+      pkg.scripts['okf:mermaid'] = 'node --import ./scripts/okf-start.mjs scripts/okf-mermaid.mts okf';
+      pkg.scripts['okf:search'] = 'node --import ./scripts/okf-start.mjs scripts/okf-search.mts';
+      pkg.scripts['okf:mermaid:render'] = build + 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --check-render';
+      pkg.scripts['okf:recheck'] = 'node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts recheck --bundle okf';
       if (hasEdukai) {
         pkg.scripts['edukai:validate'] =
-          'node scripts/okf-view.mts edukai --validate --strict && node scripts/okf-edukai.mts index --check';
-        pkg.scripts['edukai:index'] = 'node scripts/okf-edukai.mts index';
-        pkg.scripts['edukai:recheck'] = 'node scripts/okf-edukai.mts recheck';
-        pkg.scripts['edukai:brief'] = 'node scripts/okf-edukai.mts index && node scripts/okf-edukai-hook.mts brief';
-        pkg.scripts['edukai:search'] = 'node scripts/okf-search.mts --bundle edukai';
-        pkg.scripts['edukai:view'] = 'node scripts/okf-view.mts edukai';
+          'node --import ./scripts/okf-start.mjs scripts/okf-view.mts edukai --validate --strict && node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index --check';
+        pkg.scripts['edukai:index'] = 'node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index';
+        pkg.scripts['edukai:recheck'] = 'node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts recheck';
+        pkg.scripts['edukai:brief'] = 'node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index && node --import ./scripts/okf-start.mjs scripts/okf-edukai-hook.mts brief';
+        pkg.scripts['edukai:search'] = 'node --import ./scripts/okf-start.mjs scripts/okf-search.mts --bundle edukai';
+        pkg.scripts['edukai:view'] = 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts edukai';
       }
       if (hasWidgets) {
         pkg.scripts['okf:widgets:build'] = `npm run build -w ${WIDGETS_PKG}`;
@@ -351,6 +354,7 @@ console.log('  scripts/okf-core.mts       (parsing shared by view and search)   
 console.log('  scripts/okf-rank.mts       (the ranking, also run in the viewer)  refreshed');
 console.log('  scripts/okf-edukai.mts     (lessons, pins and re-checks)          refreshed');
 console.log('  scripts/okf-edukai-hook.mts (harness hooks, lesson states)        refreshed');
+console.log('  scripts/okf-start.mjs      (compile cache, loaded by the scripts) refreshed');
 if (opts.edukai) console.log('  edukai/                    (the agent memory bundle: lessons are added as agents learn)');
 if (created.length) {
   console.log('\nCreated:');

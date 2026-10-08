@@ -102,13 +102,13 @@ Put it back with `git checkout examples/demo/src/poller/retry.ts`.
 $ npm run demo:edukai:search -- search "tests"
 3 matches
 
-1. tooling-parcel-tracker/lessons/2026-08-23-ci-runs-tests-via-btest  (score 1.22)
+1. tooling-parcel-tracker/lessons/2026-08-23-ci-runs-tests-via-btest  (score 0.94)
    CI runs tests via btest, not make  [Lesson · tested · machine-confirmed · fresh, 21d left]
    ...
-2. tooling-parcel-tracker/overview  (score 1.04)
+2. tooling-parcel-tracker/overview  (score 0.66)
    Parcel tracker's tooling  [Overview · unverified · no expiry]
    ...
-3. tooling-parcel-tracker/lessons/2026-08-20-tests-run-via-make  (score 0.39)
+3. tooling-parcel-tracker/lessons/2026-08-20-tests-run-via-make  (score 0.35)
    Tests run via make test  [Lesson · observed · machine-confirmed · stale 25d · deprecated · replaced by tooling-parcel-tracker/lessons/2026-08-23-ci-runs-tests-via-btest]
    ...
 ```

@@ -2451,7 +2451,7 @@ const JS = `
 
   // --- Search -----------------------------------------------------------------
   // "Ranked" runs the ranking okf-search uses (window.OKF_RANK, the same file): BM25F over title,
-  // tags, path, description, headings and body, with stale, deprecated and unverified concepts
+  // tags, path, description, headings, cited files and body, with stale, deprecated and unverified concepts
   // ranked lower and flagged, never hidden. "Contains" is the plain match on title, path and tag.
   // The type, trust and freshness selects narrow either mode.
   const Rank = window.OKF_RANK;
@@ -2479,6 +2479,10 @@ const JS = `
       generated_at: String((d.generated || {}).at || ""),
       verified_at: latestAt(d.verified),
       links_to: outLinks[d.id] || [],
+      // The files it rests on (not URLs), so a search for "poller.ts" finds what cites it.
+      cites: (d.sources || [])
+        .map((s) => (s && typeof s.resource === "string" ? s.resource.trim() : ""))
+        .filter((r) => r && !/^[a-z][a-z0-9+.-]*:/i.test(r)),
     };
   }
   let rankIndex = null;

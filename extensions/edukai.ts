@@ -13,7 +13,7 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 interface TextContent {
   type: 'text';
@@ -64,6 +64,9 @@ interface Pi {
 }
 
 const CORE = fileURLToPath(new URL('../skills/okf-bootstrap/assets/okf-edukai-hook.mts', import.meta.url));
+// Loaded before the core, it keeps Node from stripping the core's TypeScript on every call.
+const COMPILE_CACHE = fileURLToPath(new URL('../hooks/compile-cache.mjs', import.meta.url));
+const NODE_ARGS = fs.existsSync(COMPILE_CACHE) ? ['--import', pathToFileURL(COMPILE_CACHE).href] : [];
 // A model is right to be wary of instructions that turn up inside a tool result, so the
 // prefix is declared where it does trust what it reads: the system prompt.
 const PREFIX_NOTE =
@@ -94,7 +97,7 @@ export default function edukai(pi: Pi): void {
     try {
       const bundle = bundleOf(ctx);
       if (bundle === null) return '';
-      const args = [CORE, command, ...extra, '--bundle', bundle, '--session', ctx.sessionManager.getSessionId()];
+      const args = [...NODE_ARGS, CORE, command, ...extra, '--bundle', bundle, '--session', ctx.sessionManager.getSessionId()];
       const result = await pi.exec('node', args, { timeout: 5000, cwd: ctx.cwd });
       if (result.code !== 0) {
         debug(`${command} exited ${result.code}: ${result.stderr}`);

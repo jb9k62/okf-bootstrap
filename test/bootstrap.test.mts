@@ -50,6 +50,7 @@ describe('bootstrap', () => {
       'scripts/okf-rank.mts',
       'scripts/okf-edukai.mts',
       'scripts/okf-edukai-hook.mts',
+      'scripts/okf-start.mjs',
       'okf-concept-template.md',
       'okf-explainer-template.md',
     ]) {
@@ -57,9 +58,9 @@ describe('bootstrap', () => {
     }
     assert.ok(!fs.existsSync(path.join(dir, 'packages')), 'no widgets without --widgets');
     const pkg = pkgOf(dir);
-    assert.equal(pkg.scripts['okf:view'], 'node scripts/okf-view.mts okf');
-    assert.equal(pkg.scripts['okf:fix'], 'node scripts/okf-view.mts okf --validate --fix');
-    assert.equal(pkg.scripts['okf:search'], 'node scripts/okf-search.mts');
+    assert.equal(pkg.scripts['okf:view'], 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf');
+    assert.equal(pkg.scripts['okf:fix'], 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --validate --fix');
+    assert.equal(pkg.scripts['okf:search'], 'node --import ./scripts/okf-start.mjs scripts/okf-search.mts');
     assert.equal(pkg.scripts['okf:widgets:build'], undefined);
     assert.ok(pkg.devDependencies.yaml);
     assert.equal(pkg.type, undefined, 'the tools are .mts; package.json "type" stays alone');
@@ -103,7 +104,7 @@ describe('bootstrap', () => {
     assert.ok(!fs.existsSync(path.join(dir, 'scripts', 'okf-view.mjs')));
     assert.ok(fs.existsSync(path.join(dir, 'scripts', 'okf-search.mjs')), 'only the tools that shipped as .mjs are removed');
     assert.match(r.out, /Removed[\s\S]*scripts\/okf-view\.mjs/);
-    assert.equal(pkgOf(dir).scripts['okf:view'], 'node scripts/okf-view.mts okf');
+    assert.equal(pkgOf(dir).scripts['okf:view'], 'node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf');
     assert.ok(!fs.existsSync(path.join(dir, 'okf', 'index.md')), '--tools-only leaves okf/ alone');
   });
 
@@ -124,7 +125,7 @@ describe('bootstrap', () => {
     assert.ok(!fs.existsSync(path.join(widgets, 'dist')), 'no build output copied');
     const pkg = pkgOf(dir);
     assert.deepEqual(pkg.workspaces, ['apps/*', 'packages/okf-widgets']);
-    assert.equal(pkg.scripts['okf:view'], 'npm run okf:widgets:build && node scripts/okf-view.mts okf');
+    assert.equal(pkg.scripts['okf:view'], 'npm run okf:widgets:build && node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf');
     assert.equal(pkg.scripts['okf:widgets:build'], 'npm run build -w okf-widgets');
 
     fs.writeFileSync(path.join(widgets, 'src', 'mine.ts'), 'export {};\n');

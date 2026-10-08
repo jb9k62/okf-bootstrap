@@ -2,13 +2,18 @@
 /**
  * OKF bundle search: ranked, spec-aware retrieval for agents and people.
  *
- * Reads a bundle once (frontmatter, headings, links, term counts), caches that on
- * disk keyed by each file's size, mtime and ctime, and answers queries from the cache.
+ * Reads a bundle once (frontmatter, headings, links, word counts), caches that on disk
+ * as an inverted index keyed by each file's size, mtime and ctime, and answers queries
+ * from the cache.
  * No daemon: every run re-stats the files and re-parses what changed, and what was
  * modified close to when the cache was written (the "racily clean" rule version
  * control tools use), so a deleted cache only costs time. `--no-cache` skips it.
  *
- * Ranking is BM25F over title, tags, path, description, headings and body, then
+ * A query word also finds its other forms ("caching" finds "cache"), and one the bundle
+ * does not hold finds the words it begins ("retr") or nearly spells ("jiter"), at a lower
+ * weight. Words a question is asked with ("how", "the") are ignored beside real ones.
+ *
+ * Ranking is BM25F over title, tags, path, description, headings, cited files and body, then
  * adjusted by what the OKF spec says about a concept: stale (§5.5) and deprecated
  * (§5.4) concepts are demoted and flagged, never hidden; human-reviewed (§5.3)
  * concepts rank above machine-confirmed above unverified; concepts that others link
@@ -18,7 +23,9 @@
  *   node scripts/okf-search.mts <command> [args] [options]
  *
  *   search [query]     ranked concepts (the query may be empty when a filter is given)
- *   show <id>          one concept; --section <heading> for part of it, --outline for headings
+ *   show <id>          one concept; --section <heading> for part of it, --outline for headings.
+ *                      An id is a path from the bundle root; the end of one will do when it
+ *                      names a single concept ("retry-policy")
  *   related <id>       what it links to, what links to it, concepts sharing its tags
  *   facets             the tags, types, statuses and trust tiers in use, with counts
  *   stale              the review queue: stale concepts, most overdue first
@@ -29,6 +36,7 @@
  *   --status <s>       draft | stable | deprecated
  *   --trust <list>     human, machine, unverified (comma-separated, exact tiers)
  *   --confidence <c>   a lesson's confidence: tested | observed | inferred
+ *   --cites <path>     has this file in `sources` or `check` (a folder matches the files under it)
  *   --fresh | --stale  not stale / stale (a concept without `stale_after` never expires)
  *   --expires-within 14d   stale_after falls in the next 14 days (units: h, d, w)
  *   --linked-from <id> concepts that <id> links to
@@ -56,26 +64,31 @@ import {
   errorMessage,
   extractLinks,
   listMarkdown,
+  loadYaml,
   normalizeVerified,
   parseDocument,
   RESERVED,
+  splitDocument,
   trustTier,
 } from './okf-core.mts';
 import {
+  addPostings,
   buildEntry,
-  buildIndex,
+  citesPath,
+  DAY,
   freshness,
   freshnessLabel,
   hasFilters,
+  HEADING_RE,
+  makeIndex,
   matchesFilters,
-  NO_FILTERS,
+  queryTerms,
+  remapPostings,
   search,
   snippet,
   stripCode,
-  tokenize,
 } from './okf-rank.mts';
-import { DAY } from './okf-rank.mts';
-import type { Entry, EntryMeta, Filters, Freshness, Hit, RankIndex } from './okf-rank.mts';
+import type { Doc, Entry, EntryMeta, Filters, Freshness, Hit, Postings, RankIndex } from './okf-rank.mts';
 
 // The cache is only valid for the code that wrote it: a hash of this file, okf-core.mts and
 // okf-rank.mts, so a refreshed copy of any never reads entries a different tokenizer produced.
@@ -100,7 +113,7 @@ interface Cached {
   size: number;
   mtime: number;
   ctime: number;
-  entry?: Entry;
+  doc?: number; // its position in `docs`
   error?: string; // why the file could not be indexed
 }
 
@@ -108,6 +121,8 @@ interface CacheFile {
   version: string;
   written: number; // ms since the epoch, when this file was written
   files: Record<string, Cached>;
+  docs: Doc[];
+  postings: Record<string, number[]>;
 }
 
 interface Skipped {
@@ -137,6 +152,7 @@ interface Options {
   status: string | null;
   trust: string[] | null;
   confidence: string | null;
+  cites: string | null;
   freshness: 'fresh' | 'stale' | null;
   expiresWithin: number | null;
   linkedFrom: string | null;
@@ -144,6 +160,15 @@ interface Options {
 }
 
 class UsageError extends Error {}
+
+/** `yaml` before the first file is parsed: without it nothing can be indexed, which is not a fault in any one file. */
+function needYaml(): void {
+  try {
+    loadYaml();
+  } catch (e) {
+    throw new UsageError('could not load the `yaml` package (' + errorMessage(e).split('\n')[0] + ').\n  fix: npm install');
+  }
+}
 
 // --- indexing one file ------------------------------------------------------
 
@@ -160,6 +185,21 @@ function latest(values: unknown[]): string {
   return best;
 }
 
+/** The files a concept rests on: `sources` that are paths (not URLs), and the files its checks name. */
+function citedFiles(fm: Record<string, unknown>): string[] {
+  const list = (v: unknown): unknown[] => (Array.isArray(v) ? v : v && typeof v === 'object' ? [v] : []);
+  const out = new Set<string>();
+  for (const [key, field] of [['sources', 'resource'], ['check', 'file']] as const) {
+    for (const item of list(fm[key])) {
+      const raw = item && typeof item === 'object' ? (item as Record<string, unknown>)[field] : null;
+      if (typeof raw !== 'string' || /^[a-z][a-z0-9+.-]*:/i.test(raw.trim())) continue;
+      const file = citesPath(raw);
+      if (file) out.add(file);
+    }
+  }
+  return [...out];
+}
+
 function indexFile(rel: string, bundleRoot: string, text: string): Entry {
   const { frontmatter: fm, body } = parseDocument(text);
   if (fm.type == null || String(fm.type).trim() === '') {
@@ -167,6 +207,7 @@ function indexFile(rel: string, bundleRoot: string, text: string): Entry {
   }
   const id = rel.replace(/\.md$/, '');
   const generated = fm.generated && typeof fm.generated === 'object' ? fm.generated : {};
+  const cites = citedFiles(fm);
   const meta: EntryMeta = {
     id,
     type: String(fm.type),
@@ -181,6 +222,7 @@ function indexFile(rel: string, bundleRoot: string, text: string): Entry {
     links_to: extractLinks(body, path.dirname(path.join(bundleRoot, rel)), bundleRoot),
     ...(fm.confidence == null ? {} : { confidence: String(fm.confidence).toLowerCase() }),
     ...(typeof fm.superseded_by === 'string' ? { superseded_by: fm.superseded_by } : {}),
+    ...(cites.length ? { cites } : {}),
   };
   return buildEntry(meta, body);
 }
@@ -209,7 +251,9 @@ function cachePath(bundleRoot: string): string | null {
 function readCache(file: string): CacheFile | null {
   try {
     const c = JSON.parse(fs.readFileSync(file, 'utf8')) as CacheFile;
-    return c && c.version === CACHE_VERSION && typeof c.written === 'number' && c.files ? c : null;
+    const ok =
+      c && c.version === CACHE_VERSION && typeof c.written === 'number' && c.files && Array.isArray(c.docs) && c.postings && typeof c.postings === 'object';
+    return ok ? c : null;
   } catch {
     return null; // missing or corrupt: rebuild
   }
@@ -230,10 +274,12 @@ function writeCache(file: string, cache: CacheFile): void {
 function loadIndex(bundleRoot: string, useCache: boolean): Index {
   const file = useCache ? cachePath(bundleRoot) : null;
   const old = file ? readCache(file) : null;
-  const next: CacheFile = { version: CACHE_VERSION, written: Date.now(), files: {} };
+  const next: CacheFile = { version: CACHE_VERSION, written: Date.now(), files: {}, docs: [], postings: {} };
   let changed = old === null;
   const skipped: Skipped[] = [];
-  const entries: Entry[] = [];
+  // Where each concept the cache already holds now sits in `docs`, or -1 when it is gone or re-read.
+  const keep = new Array<number>(old?.docs.length ?? 0).fill(-1);
+  const fresh: Array<{ doc: number; tf: Entry['tf'] }> = [];
 
   const files = listMarkdown(bundleRoot);
   for (const rel of files) {
@@ -246,38 +292,57 @@ function loadIndex(bundleRoot: string, useCache: boolean): Index {
       skipped.push({ file: rel, reason: errorMessage(e) });
       continue;
     }
-    let rec = old?.files[rel];
+    const rec = old?.files[rel];
     const trusted =
       rec &&
       rec.size === st.size &&
       rec.mtime === st.mtimeMs &&
       rec.ctime === st.ctimeMs &&
-      rec.mtime < old!.written - RACY_MS;
-    if (!rec || !trusted) {
-      changed = true;
-      let text: string;
-      try {
-        text = fs.readFileSync(full, 'utf8');
-      } catch (e) {
-        // A read failure may be transient (permissions), so it is reported but never cached.
-        skipped.push({ file: rel, reason: errorMessage(e) });
-        continue;
+      rec.mtime < old!.written - RACY_MS &&
+      (rec.doc === undefined ? typeof rec.error === 'string' : old!.docs[rec.doc] !== undefined);
+    if (rec && trusted) {
+      if (rec.doc === undefined) {
+        next.files[rel] = rec;
+        skipped.push({ file: rel, reason: rec.error! });
+      } else {
+        keep[rec.doc] = next.docs.length;
+        next.files[rel] = { ...rec, doc: next.docs.length };
+        next.docs.push(old!.docs[rec.doc]!);
       }
-      rec = { size: st.size, mtime: st.mtimeMs, ctime: st.ctimeMs };
-      try {
-        rec.entry = indexFile(rel, bundleRoot, text);
-      } catch (e) {
-        rec.error = errorMessage(e);
-      }
+      continue;
     }
-    next.files[rel] = rec;
-    if (rec.entry) entries.push(rec.entry);
-    else skipped.push({ file: rel, reason: rec.error ?? 'unreadable' });
+    needYaml();
+    changed = true;
+    let text: string;
+    try {
+      text = fs.readFileSync(full, 'utf8');
+    } catch (e) {
+      // A read failure may be transient (permissions), so it is reported but never cached.
+      skipped.push({ file: rel, reason: errorMessage(e) });
+      continue;
+    }
+    const stamp = { size: st.size, mtime: st.mtimeMs, ctime: st.ctimeMs };
+    try {
+      const { tf, ...doc } = indexFile(rel, bundleRoot, text);
+      fresh.push({ doc: next.docs.length, tf });
+      next.files[rel] = { ...stamp, doc: next.docs.length };
+      next.docs.push(doc);
+    } catch (e) {
+      next.files[rel] = { ...stamp, error: errorMessage(e) };
+      skipped.push({ file: rel, reason: next.files[rel].error! });
+    }
   }
   if (old && Object.keys(old.files).length !== Object.keys(next.files).length) changed = true;
-  if (file && changed) writeCache(file, next);
 
-  return { ...buildIndex(entries), skipped };
+  // Nothing changed: the cached postings are the index. Otherwise drop what went, renumber
+  // what stayed, and add what was read.
+  let postings: Postings = old ? new Map(Object.entries(old.postings)) : new Map();
+  if (changed) {
+    if (old) postings = remapPostings(postings, keep);
+    for (const { doc, tf } of fresh) addPostings(postings, doc, tf);
+    if (file) writeCache(file, { ...next, postings: Object.fromEntries(postings) });
+  }
+  return { ...makeIndex(next.docs, postings), skipped };
 }
 
 // --- resolving ids and filters ------------------------------------------------
@@ -286,12 +351,19 @@ function normalizeId(raw: string): string {
   return raw.trim().replace(/^\/+/, '').replace(/\.md$/, '');
 }
 
-function resolveId(idx: Index, raw: string): Entry {
+function resolveId(idx: Index, raw: string): Doc {
   const id = normalizeId(raw);
   const hit = idx.byId.get(id);
   if (hit) return hit;
-  const base = id.split('/').pop()!;
-  const near = idx.entries.filter((e) => e.id.includes(base)).slice(0, 5);
+  // Named by the end of its path, or in another case: taken when only one concept answers.
+  const want = id.toLowerCase();
+  const tails = idx.entries.filter((e) => {
+    const have = e.id.toLowerCase();
+    return have === want || have.endsWith('/' + want);
+  });
+  if (tails.length === 1) return tails[0]!;
+  const base = want.split('/').pop()!;
+  const near = (tails.length ? tails : idx.entries.filter((e) => e.id.toLowerCase().includes(base))).slice(0, 5);
   throw new UsageError(
     `no concept "${id}" in the bundle` +
       (near.length ? `\n  did you mean: ${near.map((e) => e.id).join(', ')}` : ''),
@@ -306,6 +378,7 @@ function filtersOf(o: Options, idx: Index): Filters {
     status: o.status,
     trust: o.trust,
     confidence: o.confidence,
+    cites: o.cites,
     freshness: o.freshness,
     expiresWithin: o.expiresWithin,
     linkedFrom: o.linkedFrom ? resolveId(idx, o.linkedFrom) : null,
@@ -315,9 +388,9 @@ function filtersOf(o: Options, idx: Index): Filters {
 
 // --- reading a concept ------------------------------------------------------
 
-function readBody(bundleRoot: string, e: Entry): string {
+function readBody(bundleRoot: string, e: Doc): string {
   try {
-    return parseDocument(fs.readFileSync(path.join(bundleRoot, e.id + '.md'), 'utf8')).body;
+    return splitDocument(fs.readFileSync(path.join(bundleRoot, e.id + '.md'), 'utf8')).body;
   } catch {
     return '';
   }
@@ -329,7 +402,7 @@ function section(body: string, want: string): string | null {
   const q = want.trim().toLowerCase();
   const heads: Array<{ i: number; level: number; text: string }> = [];
   flat.forEach((line, i) => {
-    const m = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/);
+    const m = line.match(HEADING_RE);
     if (m) heads.push({ i, level: m[1]!.length, text: m[2]!.toLowerCase() });
   });
   const start = heads.find((h) => h.text === q) ?? heads.find((h) => h.text.includes(q));
@@ -340,7 +413,7 @@ function section(body: string, want: string): string | null {
 
 // --- output -----------------------------------------------------------------
 
-function summary(e: Entry, o: Options) {
+function summary(e: Doc, o: Options) {
   const f = freshness(e, o.now);
   return {
     id: e.id,
@@ -360,7 +433,7 @@ function summary(e: Entry, o: Options) {
   };
 }
 
-const badge = (e: Entry, o: Options) =>
+const badge = (e: Doc, o: Options) =>
   [
     e.type,
     ...(e.confidence ? [e.confidence] : []),
@@ -379,7 +452,7 @@ function cmdSearch(idx: Index, o: Options, bundleRoot: string): void {
   const filters = filtersOf(o, idx);
   const filtered = hasFilters(filters);
   if (!query && !filtered) throw new UsageError('search needs a query or at least one filter');
-  if (query && tokenize(query).length === 0 && !filtered) {
+  if (query && queryTerms(query).length === 0 && !filtered) {
     throw new UsageError(`"${query}" has no searchable words`);
   }
   const all = search(idx, filters, o.now, query, o.all);
@@ -441,7 +514,7 @@ function cmdShow(idx: Index, o: Options, bundleRoot: string): void {
 function cmdRelated(idx: Index, o: Options): void {
   if (o.args.length !== 1) throw new UsageError('related takes one concept id');
   const e = resolveId(idx, o.args[0]!);
-  const pick = (ids: string[]) => ids.filter((id) => id !== e.id).map((id) => idx.byId.get(id)).filter((x): x is Entry => !!x);
+  const pick = (ids: string[]) => ids.filter((id) => id !== e.id).map((id) => idx.byId.get(id)).filter((x): x is Doc => !!x);
   const mine = new Set(e.tags.map((t) => t.toLowerCase()));
   const shared = idx.entries
     .filter((x) => x.id !== e.id)
@@ -465,7 +538,7 @@ function cmdRelated(idx: Index, o: Options): void {
 }
 
 function cmdFacets(idx: Index, o: Options): void {
-  const count = (keys: (e: Entry) => string[]) => {
+  const count = (keys: (e: Doc) => string[]) => {
     const m = new Map<string, { count: number; stale: number }>();
     for (const e of idx.entries) {
       const stale = freshness(e, o.now).state === 'stale' ? 1 : 0;
@@ -524,7 +597,7 @@ function cmdStale(idx: Index, o: Options): void {
 // --- arguments --------------------------------------------------------------
 
 const VALUE_FLAGS = new Set([
-  'bundle', 'limit', 'tag', 'type', 'status', 'trust', 'confidence', 'now', 'section', 'expires-within', 'linked-from', 'links-to',
+  'bundle', 'limit', 'tag', 'type', 'status', 'trust', 'confidence', 'cites', 'now', 'section', 'expires-within', 'linked-from', 'links-to',
 ]);
 const BOOL_FLAGS = new Set(['json', 'explain', 'outline', 'fresh', 'stale', 'all', 'no-cache', 'strict', 'help']);
 
@@ -548,7 +621,8 @@ function parseArgs(argv: string[]): Options {
       flags.set(name, ['true']);
     } else if (VALUE_FLAGS.has(name)) {
       const v = inline ?? argv[++i];
-      if (v === undefined) throw new UsageError(`--${name} needs a value`);
+      // `--tag --json` is a forgotten value, not a tag named --json. `--tag=--json` says the other.
+      if (v === undefined || (inline === undefined && v.startsWith('--'))) throw new UsageError(`--${name} needs a value`);
       flags.set(name, [...(flags.get(name) ?? []), v]);
     } else {
       throw new UsageError(`unknown option --${name}`);
@@ -602,6 +676,7 @@ function parseArgs(argv: string[]): Options {
     status: one('status'),
     trust,
     confidence,
+    cites: one('cites') === null ? null : citesPath(one('cites')!) || null,
     freshness: has('fresh') ? 'fresh' : has('stale') ? 'stale' : null,
     expiresWithin: one('expires-within') === null ? null : parseDuration(one('expires-within')!),
     linkedFrom: one('linked-from'),

@@ -55,6 +55,7 @@ This creates:
 - `okf/adr/readme.md`, `okf/adr/template.md`
 - `okf/design/` and `okf/<slug>/` (blank, with `.gitkeep`)
 - `scripts/okf-view.mts` (the validator + viewer), `scripts/okf-mermaid.mts` (the Mermaid parse checker), `scripts/okf-search.mts` (search), `scripts/okf-core.mts` (parsing), `scripts/okf-rank.mts` (the ranking; also run by the viewer's search box), and `scripts/okf-edukai.mts` with `scripts/okf-edukai-hook.mts` (pins and re-checks; the memory bundle's tool)
+- `scripts/okf-start.mjs`, which every npm script loads first (`node --import ./scripts/okf-start.mjs …`): it turns on Node's compile cache under `node_modules/.cache/okf-compile`, so a tool's TypeScript is stripped once and not on every run
 - `okf-concept-template.md` and `okf-explainer-template.md` (authoring aids, kept *outside* the bundle so they are not scanned)
 - with `--widgets`: `packages/okf-widgets/`, added to the npm `workspaces`
 - with `--edukai`: `edukai/index.md` and `edukai/log.md`, the `edukai:` scripts, and a marked snippet in `AGENTS.md`
@@ -94,12 +95,12 @@ tooling into a project whose bundle is already written.
 4. **Add npm scripts** to `package.json` (and `yaml` as a devDependency; no `"type"` change,
    the tools are `.mts`):
    ```jsonc
-   "okf:validate":       "node scripts/okf-view.mts okf --validate",
-   "okf:fix":            "node scripts/okf-view.mts okf --validate --fix",
-   "okf:view":           "node scripts/okf-view.mts okf",
-   "okf:mermaid":        "node scripts/okf-mermaid.mts okf",
-   "okf:mermaid:render": "node scripts/okf-view.mts okf --check-render",
-   "okf:search":         "node scripts/okf-search.mts"
+   "okf:validate":       "node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --validate",
+   "okf:fix":            "node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --validate --fix",
+   "okf:view":           "node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf",
+   "okf:mermaid":        "node --import ./scripts/okf-start.mjs scripts/okf-mermaid.mts okf",
+   "okf:mermaid:render": "node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --check-render",
+   "okf:search":         "node --import ./scripts/okf-start.mjs scripts/okf-search.mts"
    ```
 5. **Author the first concepts** in `okf/<slug>/` (overview, architecture, domain model, API)
    and record the first ADR, including the one for using OKF itself (see the checklist below).
@@ -242,18 +243,25 @@ The viewer derives per concept:
 
 Before reading files, ask the bundle. `npm run okf:search -- <command>` (default bundle
 `okf/`; `--bundle <dir>` for another) ranks concepts by BM25F over title, tags, path,
-description, headings and body, then applies the spec: stale (§5.5) and `deprecated` (§5.4)
+description, headings, cited files (`sources`, `check`) and body, then applies the spec: stale (§5.5) and `deprecated` (§5.4)
 concepts are demoted and flagged, never hidden; `human-reviewed` outranks `machine-confirmed`
 outranks `unverified` (§5.3); concepts others link to get a small boost. `--explain` shows the
 arithmetic. Add `--json` for agents.
 
+A query word also finds its other forms ("retries", "retrying" and "retried" all find "retry";
+"GitHub" finds "github"; "cafe" finds "café"). A word the bundle does not hold in any form is
+tried as the start of a word ("retr"), then as a near spelling ("jiter"), each at a lower
+weight. Words a question is asked with ("how", "does", "the") are ignored beside real ones, so
+a question can be pasted as it is. `--all` requires every remaining word.
+
 ```bash
 npm run okf:search -- facets                          # the tags, types, trust tiers in use; start here
 npm run okf:search -- search "retry backoff" --fresh  # ranked; --tag, --type, --status, --trust human,machine
-npm run okf:search -- show parcel-tracker/retry-policy --outline   # headings only
+npm run okf:search -- show parcel-tracker/retry-policy --outline   # headings only; "retry-policy" alone will do when one concept ends that way
 npm run okf:search -- show parcel-tracker/overview --section "What it does"   # one section, not the file
 npm run okf:search -- related adr/0003-full-jitter-retries   # links, backlinks, shared tags
 npm run okf:search -- stale --expires-within 14d      # the review queue
+npm run okf:search -- search --cites src/poller       # what rests on a file, or on any file under a folder
 ```
 
 The workflow for an agent: `facets` to learn the vocabulary, `search` with filters, `show

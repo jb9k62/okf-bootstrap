@@ -37,6 +37,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 import { freshness } from './okf-rank.mts';
 import type { EntryMeta } from './okf-rank.mts';
 
@@ -48,6 +49,9 @@ export const CACHE_SCHEMA = 1;
 const RACY_MS = 2000;
 const MAX_CHECK_BYTES = 1_000_000;
 export const MAX_REGEX_LENGTH = 200;
+// A `matches` check gets this long. One that backtracks without end would otherwise hold a
+// hook until the harness kills it, on every file the agent opens.
+const REGEX_BUDGET_MS = 200;
 const BRIEF_CHARS = 2000;
 const BRIEF_MAX_HASHED = 2000;
 const CITES_SHOWN = 3;
@@ -157,13 +161,30 @@ export function resolveInRoot(root: string, rel: string): string | null {
   const back = path.relative(root, full);
   if (back === '' || back.startsWith('..') || path.isAbsolute(back)) return null;
   try {
-    const real = fs.realpathSync(full);
-    const realBack = path.relative(realOrResolved(root), real);
+    // One system call each, where the JavaScript version asks about every folder on the way:
+    // this runs for every file every lesson names, at every session start.
+    const real = fs.realpathSync.native(full);
+    const realBack = path.relative(realRoot(root), real);
     if (realBack.startsWith('..') || path.isAbsolute(realBack)) return null;
   } catch {
     // Missing: there is nothing to follow, and the caller reports it as missing.
   }
   return full;
+}
+
+const realRoots = new Map<string, string>();
+/** The project root's real path, looked up once per run. */
+function realRoot(root: string): string {
+  let real = realRoots.get(root);
+  if (real === undefined) {
+    try {
+      real = fs.realpathSync.native(root);
+    } catch {
+      real = path.resolve(root);
+    }
+    realRoots.set(root, real);
+  }
+  return real;
 }
 
 /** A path the harness gave (absolute, or relative to `cwd`) as a path from the project root. */
@@ -192,7 +213,7 @@ export function relToRoot(root: string, file: string, cwd: string): string | nul
 
 /** `sha256:` and the first 16 hex characters of the file's SHA-256, with CRLF read as LF. */
 export function digestOf(bytes: Buffer): string {
-  const lf = Buffer.from(bytes.toString('latin1').replace(/\r\n/g, '\n'), 'latin1');
+  const lf = bytes.includes(13) ? Buffer.from(bytes.toString('latin1').replace(/\r\n/g, '\n'), 'latin1') : bytes;
   return 'sha256:' + crypto.createHash('sha256').update(lf).digest('hex').slice(0, 16);
 }
 
@@ -282,6 +303,27 @@ export function checkProblem(c: unknown): string | null {
 
 type CheckResult = 'holds' | 'fails' | 'missing';
 
+const REGEX_SCRIPT = new vm.Script('re.test(text)');
+let regexContext: vm.Context | null = null;
+/** The `matches` checks that ran out of time, as "file, then the expression": not run twice, and named as such. */
+const tooSlow = new Set<string>();
+const slowKey = (file: string, source: string): string => file + '\n' + source;
+
+/** Does the expression match? Null when it did not finish within its budget. */
+function regexMatches(source: string, text: string): boolean | null {
+  const context = (regexContext ??= vm.createContext(Object.create(null) as object));
+  context.re = new RegExp(source);
+  context.text = text;
+  try {
+    // Only the match runs in there, and only so that it can be stopped.
+    return REGEX_SCRIPT.runInContext(context, { timeout: REGEX_BUDGET_MS }) === true;
+  } catch {
+    return null;
+  } finally {
+    context.text = '';
+  }
+}
+
 function runCheck(c: Check, reader: Reader): CheckResult {
   if (checkProblem(c) !== null) return 'fails';
   const f = reader.read(normalizeRel(c.file));
@@ -296,7 +338,11 @@ function runCheck(c: Check, reader: Reader): CheckResult {
   const text = f.bytes.toString('utf8');
   if (typeof c.contains === 'string') return text.includes(c.contains) ? 'holds' : 'fails';
   if (typeof c.lacks === 'string') return text.includes(c.lacks) ? 'fails' : 'holds';
-  return new RegExp(c.matches!).test(text) ? 'holds' : 'fails';
+  const key = slowKey(normalizeRel(c.file), c.matches!);
+  if (tooSlow.has(key)) return 'fails';
+  const matched = regexMatches(c.matches!, text);
+  if (matched === null) tooSlow.add(key);
+  return matched ? 'holds' : 'fails';
 }
 
 /** The first check that does not hold, as a sentence, or null when all hold. */
@@ -318,6 +364,9 @@ function failText(c: Check, reader: Reader): string {
   if (typeof c.exists === 'boolean') return `${file} exists, and the check says it should not`;
   if (f.status === 'too-big' || (f.bytes && f.bytes.length > MAX_CHECK_BYTES)) {
     return `${file} is over 1 MB, too large to check`;
+  }
+  if (typeof c.matches === 'string' && tooSlow.has(slowKey(file, c.matches))) {
+    return `check ${checkLabel(c)} took over ${REGEX_BUDGET_MS} ms to run on ${file}; write a simpler expression`;
   }
   return `check ${checkLabel(c)} does not hold in ${file}`;
 }
@@ -472,32 +521,36 @@ export function listConceptFiles(bundleRoot: string): string[] {
 }
 
 /**
+ * Is a concept file still the one the cache describes? A file is trusted on the same size,
+ * mtime and ctime, and one modified close to the cache being written is compared by its bytes.
+ */
+function fileState(cache: CacheFile, bundleRoot: string, rel: string): 'same' | 'changed' | 'gone' {
+  const rec = cache.files[rel];
+  const full = path.join(bundleRoot, rel);
+  let st: fs.Stats;
+  try {
+    st = fs.statSync(full);
+  } catch {
+    return 'gone';
+  }
+  if (!rec || rec.size !== st.size) return 'changed';
+  const sameStamp = rec.mtime === st.mtimeMs && rec.ctime === st.ctimeMs;
+  if (sameStamp && rec.mtime < cache.written - RACY_MS) return 'same';
+  try {
+    return hashBytes(fs.readFileSync(full)) === rec.hash ? 'same' : 'changed';
+  } catch {
+    return 'gone';
+  }
+}
+
+/**
  * Does the cache still describe the folder? This file cannot parse YAML, so it cannot heal
- * the cache; it can only say so. A file is trusted on the same size, mtime and ctime, and one
- * modified close to the cache being written is compared by its bytes instead.
+ * the cache; it can only say so.
  */
 export function cacheIsCurrent(cache: CacheFile, bundleRoot: string): boolean {
   const files = listConceptFiles(bundleRoot);
   if (files.length !== Object.keys(cache.files).length) return false;
-  for (const rel of files) {
-    const rec = cache.files[rel];
-    if (!rec) return false;
-    let st: fs.Stats;
-    try {
-      st = fs.statSync(path.join(bundleRoot, rel));
-    } catch {
-      return false;
-    }
-    if (rec.size !== st.size) return false;
-    const sameStamp = rec.mtime === st.mtimeMs && rec.ctime === st.ctimeMs;
-    if (sameStamp && rec.mtime < cache.written - RACY_MS) continue;
-    try {
-      if (hashBytes(fs.readFileSync(path.join(bundleRoot, rel))) !== rec.hash) return false;
-    } catch {
-      return false;
-    }
-  }
-  return true;
+  return files.every((rel) => fileState(cache, bundleRoot, rel) === 'same');
 }
 
 // --- the session file -----------------------------------------------------------
@@ -709,11 +762,22 @@ export function brief(ctx: Context): Reply {
 }
 
 const WRONG: State[] = ['broken', 'failed', 'suspect'];
+// The hooks cannot read a lesson file, only the index built from it. When the file has been
+// edited since, what they say of the lesson may be out of date, and they say so.
+const EDITED_NOTE = ' (this lesson was edited after the index was built: run npm run edukai:index)';
 
 export function cites(ctx: Context, target: string, edited: boolean): Reply {
   const rel = relToRoot(ctx.root, target, ctx.cwd);
   if (rel === null) return { text: '', data: { path: rel, total: 0, lessons: [] } };
-  const hits = (ctx.cache?.lessons ?? []).filter((l) => l.status !== 'deprecated' && citesFile(l, rel));
+  const cache = ctx.cache;
+  const hits = (cache?.lessons ?? []).filter((l) => l.status !== 'deprecated' && citesFile(l, rel));
+  // What the cache says of a lesson is only as good as the lesson's file being the one it read.
+  const fileStates = new Map<string, ReturnType<typeof fileState>>();
+  const fileOf = (l: LessonRecord) => {
+    let state = fileStates.get(l.id);
+    if (!state) fileStates.set(l.id, (state = fileState(cache!, ctx.bundleRoot, l.id + '.md')));
+    return state;
+  };
   const reader = makeReader(ctx.root);
   const states = new Map(hits.slice(0, 50).map((l) => [l.id, deriveState(l, reader, ctx.now)]));
   const shown = withSession(sessionFile(ctx.paths, ctx.session), (session) => {
@@ -732,12 +796,19 @@ export function cites(ctx: Context, target: string, edited: boolean): Reply {
       save = true;
     }
     const unseen = hits.filter((l) => !session.shown.includes(l.id));
-    const list = unseen.slice(0, CITES_SHOWN);
+    // A lesson whose file has been deleted since the index was built is not cited at all.
+    const list: LessonRecord[] = [];
+    let passed = 0;
+    for (const l of unseen) {
+      if (list.length === CITES_SHOWN) break;
+      passed++;
+      if (fileOf(l) !== 'gone') list.push(l);
+    }
     if (list.length) {
       session.shown.push(...list.map((l) => l.id));
       save = true;
     }
-    return { save, result: { list, rest: unseen.length - list.length } };
+    return { save, result: { list, rest: unseen.length - passed } };
   });
   if (shown.list.length === 0) return { text: '', data: { path: rel, total: hits.length, lessons: [] } };
   const out = [`edukai: ${hits.length} lesson${hits.length === 1 ? ' cites' : 's cite'} ${safe(rel)}`];
@@ -746,9 +817,10 @@ export function cites(ctx: Context, target: string, edited: boolean): Reply {
     const d = states.get(l.id);
     const queued = d && QUEUE.includes(d.state);
     const label = [queued ? d.state : '', oneLine(l.confidence, 12) || 'lesson'].filter(Boolean).join(' · ');
-    out.push(`- [${label}] ${oneLine(l.title, 160)} (${ctx.bundleLabel}${safe(l.id)}.md)${queued ? `: ${safe(d.detail)}` : ''}`);
+    const edited = fileOf(l) === 'changed' ? EDITED_NOTE : '';
+    out.push(`- [${label}] ${oneLine(l.title, 160)} (${ctx.bundleLabel}${safe(l.id)}.md)${queued ? `: ${safe(d.detail)}` : ''}${edited}`);
   }
-  if (shown.rest > 0) out.push(`- and ${shown.rest} more: npm run edukai:search -- search "${safe(path.posix.basename(rel))}"`);
+  if (shown.rest > 0) out.push(`- and ${shown.rest} more: npm run edukai:search -- search --cites "${safe(rel)}"`);
   return {
     text: out.join('\n'),
     data: {
@@ -765,13 +837,16 @@ export function debt(ctx: Context): Reply {
   if (!cache) return none;
   const reader = makeReader(ctx.root);
   const found = withSession(sessionFile(ctx.paths, ctx.session), (session) => {
-    const wrong: Array<{ lesson: LessonRecord; derived: Derived }> = [];
+    const wrong: Array<{ lesson: LessonRecord; derived: Derived; edited: boolean }> = [];
     if (session.edited.length === 0) return { save: false, result: wrong };
     for (const l of cache.lessons) {
       if (l.status === 'deprecated' || session.nudged.includes(l.id) || session.prior.includes(l.id)) continue;
       if (!session.edited.some((rel) => citesFile(l, rel))) continue;
       const derived = deriveState(l, reader, ctx.now);
-      if (WRONG.includes(derived.state)) wrong.push({ lesson: l, derived });
+      if (!WRONG.includes(derived.state)) continue;
+      // A lesson file deleted since the index was built is no longer anyone's debt.
+      const file = fileState(cache, ctx.bundleRoot, l.id + '.md');
+      if (file !== 'gone') wrong.push({ lesson: l, derived, edited: file === 'changed' });
     }
     session.nudged.push(...wrong.slice(0, DEBT_SHOWN).map((w) => w.lesson.id));
     return { save: wrong.length > 0, result: wrong };
@@ -784,9 +859,9 @@ export function debt(ctx: Context): Reply {
       ? 'edukai: your changes left 1 lesson wrong. Fix it before you finish: supersede it, or verify it.'
       : `edukai: your changes left ${n} lessons wrong. Fix them before you finish: supersede or verify each.`,
   ];
-  for (const { lesson, derived } of named) {
+  for (const { lesson, derived, edited } of named) {
     const why = safe(derived.detail).replace(' does not hold in ', ' no longer holds in ');
-    out.push(`- [${derived.state}] ${oneLine(lesson.title, 160)}: ${why} (${ctx.bundleLabel}${safe(lesson.id)}.md)`);
+    out.push(`- [${derived.state}] ${oneLine(lesson.title, 160)}: ${why} (${ctx.bundleLabel}${safe(lesson.id)}.md)${edited ? EDITED_NOTE : ''}`);
   }
   if (n > named.length) out.push(`- and ${n - named.length} more: npm run edukai:recheck`);
   out.push('The edukai skill says how (its "Recheck" section).');
@@ -870,7 +945,8 @@ export function parseFlags(argv: string[], valueFlags: Set<string>, boolFlags: S
       flags.set(name, ['true']);
     } else if (valueFlags.has(name)) {
       const v = inline ?? argv[++i];
-      if (v === undefined) throw new UsageError(`--${name} needs a value`);
+      // `--tag --json` is a forgotten value, not a tag named --json. `--tag=--json` says the other.
+      if (v === undefined || (inline === undefined && v.startsWith('--'))) throw new UsageError(`--${name} needs a value`);
       flags.set(name, [...(flags.get(name) ?? []), v]);
     } else {
       throw new UsageError(`unknown option --${name}`);

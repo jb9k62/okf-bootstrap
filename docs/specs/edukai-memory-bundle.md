@@ -156,7 +156,7 @@ across containers.[^ci] `make test` still exists but only calls `btest`.
 | `sources` | Required, at least one. `resource` is a path from the project root, a bundle-root path starting with `/` (another concept in this bundle), or a URL. |
 | `sources[].digest` *ext* | Written by the tool for a `resource` that is a file under the project root: `sha256:` plus the first 16 hex characters of the SHA-256 of the file's bytes, with CRLF read as LF. Never hand-written. |
 | `supersedes`, `superseded_by` *ext* | Bundle-root paths ending `.md`. See below. |
-| `check` *ext* | Optional list. Each entry has `file` (from the project root) and exactly one of `contains`, `lacks` (literal substrings), `matches` (a JavaScript regular expression, at most 200 characters), or `exists` (`true` or `false`). Files over 1 MB fail the check. No shell commands, ever. |
+| `check` *ext* | Optional list. Each entry has `file` (from the project root) and exactly one of `contains`, `lacks` (literal substrings), `matches` (a JavaScript regular expression, at most 200 characters, stopped and failed after 200 ms), or `exists` (`true` or `false`). Files over 1 MB fail the check. No shell commands, ever. |
 | Body | The claim in one paragraph that stands alone, then optional `## Caveats`. At most 30 lines. Evidence is `sources`, cited by footnote (OKF §5.1), so there is no `## Evidence` heading. |
 
 **Supersede, never delete.** When a fact changes, write a new lesson. Then the old lesson gets
@@ -314,7 +314,7 @@ hashes at most 2,000 source files and says so if it stopped early.
 `okf-search.mts` takes `--bundle`, so it already works on the memory bundle with no change:
 
 ```jsonc
-"edukai:search": "node scripts/okf-search.mts --bundle edukai"
+"edukai:search": "node --import ./scripts/okf-start.mjs scripts/okf-search.mts --bundle edukai"
 ```
 
 This is how an agent finds a lesson that no file path leads to, and it replaces an earlier
@@ -377,7 +377,7 @@ output) unless `EDUKAI_DEBUG=1`. `EDUKAI_NUDGE=0` turns the finish nudge off.
 | --- | --- | --- | --- |
 | Session opens, or context was compacted | `SessionStart` (every `source`) | `session_start`, `session_compact` | `brief` |
 | Agent read a file | `PostToolUse`, matcher `Read` | `tool_result`, `toolName` `read` | `cites` |
-| Agent edited a file | `PostToolUse`, matcher `Edit\|Write` | `tool_result`, `edit` or `write` | `cites --edited` |
+| Agent edited a file | `PostToolUse`, matcher `Edit\|Write\|NotebookEdit` | `tool_result`, `edit` or `write` | `cites --edited` |
 | Agent is about to finish | `Stop` | `agent_end` | `debt` |
 
 **Claude Code**, `hooks/hooks.json` at the plugin root. Every event runs the same command, with
@@ -466,13 +466,13 @@ here, and the `--edukai` flag.
 - npm scripts. Always: `okf:recheck`. When `edukai/` exists (the pattern `hasWidgets` uses):
 
 ```jsonc
-"okf:recheck":     "node scripts/okf-edukai.mts recheck --bundle okf",
-"edukai:validate": "node scripts/okf-view.mts edukai --validate --strict && node scripts/okf-edukai.mts index --check",
-"edukai:index":    "node scripts/okf-edukai.mts index",
-"edukai:recheck":  "node scripts/okf-edukai.mts recheck",
-"edukai:brief":    "node scripts/okf-edukai.mts index && node scripts/okf-edukai-hook.mts brief",
-"edukai:search":   "node scripts/okf-search.mts --bundle edukai",
-"edukai:view":     "node scripts/okf-view.mts edukai"
+"okf:recheck":     "node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts recheck --bundle okf",
+"edukai:validate": "node --import ./scripts/okf-start.mjs scripts/okf-view.mts edukai --validate --strict && node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index --check",
+"edukai:index":    "node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index",
+"edukai:recheck":  "node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts recheck",
+"edukai:brief":    "node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index && node --import ./scripts/okf-start.mjs scripts/okf-edukai-hook.mts brief",
+"edukai:search":   "node --import ./scripts/okf-start.mjs scripts/okf-search.mts --bundle edukai",
+"edukai:view":     "node --import ./scripts/okf-start.mjs scripts/okf-view.mts edukai"
 ```
 
 - A new template, `templates/edukai-recheck.yml`, is a GitHub workflow the scaffold prints the
@@ -718,8 +718,9 @@ A critical pass over the design notes this spec came from. Each finding changed 
   this release asks for it.
 - A digest covers a whole file. A lesson about one function goes `suspect` when another function
   changes, unless it has a check.
-- `matches` runs an agent-written regular expression with no time limit. The length cap helps;
-  it is not a guarantee.
+- `matches` runs an agent-written regular expression. It gets 200 ms on a file; one that runs
+  out is a failed check ("took over 200 ms to run"), so it reaches the queue instead of
+  stalling a hook.
 - Lessons are only as findable as file paths make them. A lesson with only URL sources is seen
   through its overview or not at all.
 - Hooks fail silently by design, so a broken install looks like an empty memory. `EDUKAI_DEBUG`

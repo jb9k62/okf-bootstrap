@@ -211,13 +211,16 @@ const isMemoryBundle = (bundleRoot: string): boolean => path.basename(bundleRoot
 
 /** Re-read the bundle and rewrite the cache when it no longer says the same thing. */
 function syncCache(o: Options, write = true): ReturnType<typeof loadBundle> {
+  // Taken before the files are read: one that changes while they are read is then "modified
+  // close to the cache being written", and the hooks compare its bytes instead of its timestamps.
+  const started = Date.now();
   const loaded = loadBundle(o.bundleRoot);
   if (!write || !isMemoryBundle(o.bundleRoot)) return loaded;
   const paths = cachePaths(o.root, o.bundleRoot);
   if (!paths) return loaded;
   const next: CacheFile = {
     schema: CACHE_SCHEMA,
-    written: Date.now(),
+    written: started,
     files: loaded.stamps,
     domains: domainsOf(loaded.docs),
     lessons: loaded.docs.filter((d) => d.type === 'Lesson').map(recordOf),
@@ -539,13 +542,24 @@ function cmdNew(o: Options): number {
     body,
     '',
   ];
+  // Never leave a lesson the validator cannot read, and write nothing until that is known.
+  const written_fm = core.parseDocument(lines.join('\n')).frontmatter;
+  if (written_fm.title !== title || (isRecord(written_fm.generated) ? written_fm.generated.by : null) !== by) {
+    throw new UsageError('the title or --by does not survive as YAML; simplify it');
+  }
+  fs.mkdirSync(path.dirname(full), { recursive: true });
+  try {
+    fs.writeFileSync(full, lines.join('\n'), { flag: 'wx' });
+  } catch (e) {
+    // Another `new` took the name between the check above and this write.
+    if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+    throw new BrokenError(`${toPosix(path.relative(process.cwd(), full))} already exists; pick another --slug, or supersede it`);
+  }
   const written = [rel];
   const overview = path.join(o.bundleRoot, domain, 'overview.md');
-  const newDomain = !fs.existsSync(overview);
-  fs.mkdirSync(path.dirname(full), { recursive: true });
+  let newDomain = !fs.existsSync(overview);
   if (newDomain) {
-    fs.writeFileSync(
-      overview,
+    const stub =
       [
         '---',
         'type: Overview',
@@ -565,16 +579,16 @@ function cmdNew(o: Options): number {
         '',
         '- None recorded yet.',
         '',
-      ].join('\n'),
-    );
-    written.push(`${domain}/overview.md`);
+      ].join('\n');
+    try {
+      fs.writeFileSync(overview, stub, { flag: 'wx' });
+      written.push(`${domain}/overview.md`);
+    } catch (e) {
+      // Another `new` in the same domain wrote the stub first: the domain is not new after all.
+      if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e;
+      newDomain = false;
+    }
   }
-  // Never leave a lesson the validator cannot read.
-  const written_fm = core.parseDocument(lines.join('\n')).frontmatter;
-  if (written_fm.title !== title || (isRecord(written_fm.generated) ? written_fm.generated.by : null) !== by) {
-    throw new UsageError('the title or --by does not survive as YAML; simplify it');
-  }
-  fs.writeFileSync(full, lines.join('\n'), { flag: 'wx' });
   syncCache(o);
   const shown = toPosix(path.relative(process.cwd(), full));
   print(o, { file: shown, id: rel.replace(/\.md$/, ''), written, confidence, new_domain: newDomain }, () => {

@@ -31,15 +31,20 @@ project's `.js` files are loaded.
 
 ```jsonc
 "scripts": {
-  "okf:validate":       "node scripts/okf-view.mts okf --validate",
-  "okf:fix":            "node scripts/okf-view.mts okf --validate --fix",
-  "okf:view":           "node scripts/okf-view.mts okf",
-  "okf:mermaid":        "node scripts/okf-mermaid.mts okf",
-  "okf:mermaid:render": "node scripts/okf-view.mts okf --check-render",
-  "okf:search":         "node scripts/okf-search.mts",
-  "okf:recheck":        "node scripts/okf-edukai.mts recheck --bundle okf"
+  "okf:validate":       "node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --validate",
+  "okf:fix":            "node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --validate --fix",
+  "okf:view":           "node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf",
+  "okf:mermaid":        "node --import ./scripts/okf-start.mjs scripts/okf-mermaid.mts okf",
+  "okf:mermaid:render": "node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --check-render",
+  "okf:search":         "node --import ./scripts/okf-start.mjs scripts/okf-search.mts",
+  "okf:recheck":        "node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts recheck --bundle okf"
 }
 ```
+
+Every script loads `scripts/okf-start.mjs` first. It turns on Node's compile cache (kept under
+`node_modules/.cache/okf-compile`), so a tool's TypeScript is stripped once and not on every
+run: a cached search answers in about half the time. `node scripts/okf-search.mts …` without it
+works the same, only slower.
 
 `okf:recheck` reports concepts whose pinned `sources` changed or went missing, and those past
 `stale_after`. A source is pinned by `node scripts/okf-edukai.mts verify <concept> --bundle okf
@@ -58,8 +63,8 @@ With widgets (`--widgets`), the package is an npm workspace and is built first:
 ```jsonc
 "workspaces": ["packages/okf-widgets"],
 "scripts": {
-  "okf:view":              "npm run okf:widgets:build && node scripts/okf-view.mts okf",
-  "okf:mermaid:render":    "npm run okf:widgets:build && node scripts/okf-view.mts okf --check-render",
+  "okf:view":              "npm run okf:widgets:build && node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf",
+  "okf:mermaid:render":    "npm run okf:widgets:build && node --import ./scripts/okf-start.mjs scripts/okf-view.mts okf --check-render",
   "okf:widgets:build":     "npm run build -w okf-widgets",
   "okf:widgets:test":      "npm test -w okf-widgets",
   "okf:widgets:typecheck": "npm run typecheck -w okf-widgets"
@@ -70,12 +75,12 @@ With the memory bundle (`--edukai`), which lives in `edukai/` beside `okf/`:
 
 ```jsonc
 "scripts": {
-  "edukai:validate": "node scripts/okf-view.mts edukai --validate --strict && node scripts/okf-edukai.mts index --check",
-  "edukai:index":    "node scripts/okf-edukai.mts index",
-  "edukai:recheck":  "node scripts/okf-edukai.mts recheck",
-  "edukai:brief":    "node scripts/okf-edukai.mts index && node scripts/okf-edukai-hook.mts brief",
-  "edukai:search":   "node scripts/okf-search.mts --bundle edukai",
-  "edukai:view":     "node scripts/okf-view.mts edukai"
+  "edukai:validate": "node --import ./scripts/okf-start.mjs scripts/okf-view.mts edukai --validate --strict && node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index --check",
+  "edukai:index":    "node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index",
+  "edukai:recheck":  "node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts recheck",
+  "edukai:brief":    "node --import ./scripts/okf-start.mjs scripts/okf-edukai.mts index && node --import ./scripts/okf-start.mjs scripts/okf-edukai-hook.mts brief",
+  "edukai:search":   "node --import ./scripts/okf-start.mjs scripts/okf-search.mts --bundle edukai",
+  "edukai:view":     "node --import ./scripts/okf-start.mjs scripts/okf-view.mts edukai"
 }
 ```
 

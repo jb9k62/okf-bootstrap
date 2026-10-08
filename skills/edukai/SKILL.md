@@ -54,7 +54,8 @@ examples/demo/edukai`.
 1. **The brief.** With hooks installed it arrives when the session opens. Otherwise run
    `npm run edukai:brief`. A fresh clone has no cache: run `npm run edukai:index` once.
 2. **Search before reading.** `npm run edukai:search -- search "words"` ranks lessons;
-   `--type Lesson`, `--tag ci`, `--fresh`, `--confidence tested` narrow it. Never read the
+   `--type Lesson`, `--tag ci`, `--fresh`, `--confidence tested` narrow it, and
+   `search --cites src/poller.ts` lists what rests on a file (or on a folder). Never read the
    whole bundle to answer a question. Or read one domain's `overview.md`.
 3. **Lessons on demand.** Open a lesson when it bears on what you are doing. When you open a
    file a lesson cites, the hooks name that lesson. A lesson named as `[failed · …]`,
@@ -92,7 +93,8 @@ Then edit the file it printed:
   ```
 
   Each entry has `file` and exactly one of `contains`, `lacks` (literal text), `matches` (a
-  JavaScript regular expression, at most 200 characters) or `exists` (`true` or `false`).
+  JavaScript regular expression, at most 200 characters, given 200 ms to run: prefer
+  `contains` when the text is fixed) or `exists` (`true` or `false`).
   There are no shell commands.
 
 Then say how sure you are, and sign it:

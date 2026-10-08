@@ -50,7 +50,7 @@ node <skill dir>/assets/bootstrap.mts <targetDir> --name "Project Name" [--widge
 | `--slug` | Concept dir id (default: kebab-case of the name) |
 | `--widgets` | Also scaffold `packages/okf-widgets` (React micro-worlds), add it to the npm workspaces, and build it before `okf:view` and the render gate |
 | `--edukai` | Also scaffold `edukai/`, the agent memory bundle (see "Two bundles"), add the `edukai:` scripts, and write a short marked snippet into `AGENTS.md` once |
-| `--tools-only` | Refresh `scripts/okf-*.mts` and the `okf:` scripts only; add `--widgets` to add widgets, or `--edukai` to add the memory bundle, to a project that already has `okf/` |
+| `--tools-only` | Refresh `scripts/okf-*.mts`, `scripts/okf-start.mjs` (the compile-cache preload the scripts load) and the `okf:` scripts only; add `--widgets` to add widgets, or `--edukai` to add the memory bundle, to a project that already has `okf/` |
 | `--no-scripts` | Leave `package.json` alone |
 | `--force` | Replace the authored files (index, log, ADR index and template, authoring templates) with fresh templates. Never touches `packages/okf-widgets` |
 
@@ -117,7 +117,7 @@ changed (`node scripts/okf-edukai.mts verify <concept> --bundle okf --by <actor>
 
 Do not read a whole bundle to answer a question. `npm run okf:search -- <command>` ranks
 concepts by text and by what the spec says about them (trust tier, stale, deprecated, links):
-`facets` (the tags and types in use), `search "query" [--fresh --tag t --trust human]`,
+`facets` (the tags and types in use), `search "query" [--fresh --tag t --trust human --cites src/file.ts]`,
 `show <id> --outline` then `--section <heading>`, `related <id>`, `stale`. Add `--json`. The
 viewer's search box runs the same ranking. Treat a
 `stale` or `unverified` hit as a lead to check, not a fact. Details: the playbook's "Finding concepts".

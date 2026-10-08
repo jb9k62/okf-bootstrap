@@ -93,8 +93,10 @@ the code and differs from the spec's text:
 Also from the review: every piece of bundle text that reaches the agent (titles, ids, check
 text, paths) is flattened to one line, so a lesson cannot forge a second `edukai:` line.
 
-Known and not fixed: a slow `matches` regular expression can still stall a hook until its
-5-second timeout (accepted in the spec); on a file system that ignores case, a path written in
+Fixed since: a `matches` regular expression now gets 200 ms, and one that runs out is reported
+as a failed check instead of stalling a hook until its 5-second timeout.
+
+Known and not fixed: on a file system that ignores case, a path written in
 another case finds no lesson; a project with no `node_modules` keeps its cache in the temp
 dir, so a harness whose shell tool uses a different `TMPDIR` than its hooks would never see an
 index; `bootstrap.mts --edukai` cannot yet make a memory bundle without a design bundle.

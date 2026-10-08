@@ -170,7 +170,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
   view('ranked search lists results with trust and freshness, and Enter opens the first', async () => {
     await page.click('#reset');
     await page.focus('#search');
-    await page.keyboard.type('retry jitter');
+    await page.keyboard.type('retry policy');
     await page.waitForSelector('#search-results:not([hidden]) .sr-item');
     const rows = await page.$$eval('#search-results .sr-item', (r) => r.map((x) => x.textContent ?? ''));
     assert.ok(rows.length >= 2, 'several results');
@@ -465,6 +465,36 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.click('#theme-toggle');
     await page.click('#theme-toggle');
     await page.click('[data-view=graph]');
+  });
+
+  view('the search box finds a lesson by a file it cites, as okf-search does', async () => {
+    // The memory bundle is the one whose concepts name project files in `sources`.
+    const out = path.join(dir, 'memory.html');
+    const built = spawnSync(process.execPath, [VIEWER, 'examples/demo/edukai', '--out', out], { cwd: ROOT, encoding: 'utf8' });
+    assert.equal(built.status, 0, built.stdout + built.stderr);
+    const cli = spawnSync(process.execPath, [path.join(path.dirname(VIEWER), 'okf-search.mts'), 'search', 'week.ts', '--bundle', 'examples/demo/edukai', '--json', '--no-cache'], { cwd: ROOT, encoding: 'utf8' });
+    const expected = JSON.parse(cli.stdout).results[0];
+    assert.equal(expected.id, 'codebase-parcel-tracker/lessons/2026-10-02-weeks-start-monday-utc');
+
+    const memory = await browser!.newPage({ viewport: { width: 1400, height: 800 } });
+    const errors: string[] = [];
+    memory.on('pageerror', (e) => errors.push(e.message));
+    try {
+      await memory.route(/^https:/, (route) => {
+        const body = localLib(route.request().url());
+        return body ? route.fulfill({ contentType: 'text/javascript', body }) : route.continue();
+      });
+      await memory.goto('file://' + out);
+      await memory.waitForFunction('window.__OKF_VIEW__ && window.marked && window.cytoscape', undefined, { timeout: 20_000 });
+      await memory.focus('#search');
+      await memory.keyboard.type('week.ts');
+      await memory.waitForSelector('#search-results:not([hidden]) .sr-item');
+      const first = (await memory.textContent('#search-results .sr-item')) ?? '';
+      assert.ok(first.includes(expected.title), `${first} should lead with ${expected.title}`);
+      assert.deepEqual(errors, [], 'page errors');
+    } finally {
+      await memory.close();
+    }
   });
 
   view('on a phone the top bar stays compact and the page does not scroll sideways', async () => {

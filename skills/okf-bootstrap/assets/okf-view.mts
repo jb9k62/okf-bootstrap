@@ -759,6 +759,8 @@ function buildHTML(title: string, graph: Graph, widgetsJs: string | null): strin
   document.documentElement.dataset.theme = okfTheme === "dark" || okfTheme === "light"
     ? okfTheme
     : matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  // The graph and reading split, restored before first paint so a stored width does not flash at 40%.
+  try { const s = Number(sessionStorage.getItem("okf-split")); if (s >= 20 && s <= 70) document.documentElement.style.setProperty("--split", String(s)); } catch {}
 </script>
 <!-- Pinned with subresource integrity: a pinned version on a CDN is immutable,
      so a changed file means something is wrong and the script should not run.
@@ -879,7 +881,7 @@ ${CSS}
       <p id="table-empty" hidden>No concepts match the filters.</p>
     </div>
   </section>
-  <div id="divider" role="separator" aria-orientation="vertical" aria-label="Resize graph and reading panes" aria-controls="graph-pane" aria-valuemin="20" aria-valuemax="70" aria-valuenow="40" tabindex="0"></div>
+  <div id="divider" role="separator" aria-orientation="vertical" aria-label="Resize graph and reading panes" aria-controls="graph-pane" aria-valuemin="20" aria-valuemax="70" aria-valuenow="40" aria-valuetext="40% graph" tabindex="0"></div>
   <section id="detail">
     <p id="detail-empty">Select a concept in the graph.</p>
     <article id="detail-content" hidden>
@@ -2379,11 +2381,15 @@ const JS = `
   // --- Section anchors ------------------------------------------------------
   // Heading ids, so a link inside a concept can point at a section. See the
   // fragment branch in renderBody for why the click is handled, not followed.
+  // The id of a heading, from its rendered text. The reading pane and the contents both use it, so they agree.
+  function headingSlug(text) {
+    return text.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section";
+  }
+
   function addHeadingIds(root) {
     const seen = new Set();
     for (const heading of root.querySelectorAll("h2, h3")) {
-      const base = heading.textContent.trim().toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section";
+      const base = headingSlug(heading.textContent);
       let id = base;
       let n = 2;
       while (seen.has(id)) id = base + "-" + n++;
@@ -2630,7 +2636,7 @@ const JS = `
   }
 
   document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") return;
+    if (event.key !== "Escape" || event.defaultPrevented) return;
     const figure = document.querySelector("#detail-body .mermaid.expanded");
     if (figure) toggleDiagramExpand(figure);
   });
@@ -2877,26 +2883,25 @@ const JS = `
     }
   }
 
-  // The contents of a concept, from its own headings (levels 1 to 3, fenced code ignored). Cached per concept.
+  // The contents of a concept, from its own headings (levels 2 and 3, fenced code ignored). Cached per
+  // concept. Each heading is rendered as the reading pane renders it, so its text and id match the pane's.
+  // The title (level 1) is left out, as the preview leaves it out. An inert document parses the markup.
   function tocFor(id) {
     if (!tocCache[id]) {
       const seen = new Set();
       const out = [];
+      const scratch = document.implementation.createHTMLDocument("").body;
       for (const line of Rank.stripCode(bundle.bodies[id] || "", false).split("\\n")) {
         const m = line.match(Rank.HEADING_RE);
-        if (!m || m[1].length > 3) continue;
-        const level = m[1].length;
-        const text = m[2].split(TICK).join("").split("**").join("").trim();
-        let slug = null;
-        // The same ids addHeadingIds gives the headings in the reading pane (levels 2 and 3).
-        if (level >= 2) {
-          const base = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section";
-          slug = base;
-          let n = 2;
-          while (seen.has(slug)) slug = base + "-" + n++;
-          seen.add(slug);
-        }
-        out.push({ level, text, slug });
+        if (!m || m[1].length < 2 || m[1].length > 3) continue;
+        scratch.innerHTML = marked.parseInline(m[2], { gfm: true });
+        const text = scratch.textContent.trim();
+        const base = headingSlug(text);
+        let slug = base;
+        let n = 2;
+        while (seen.has(slug)) slug = base + "-" + n++;
+        seen.add(slug);
+        out.push({ level: m[1].length, text, slug });
       }
       tocCache[id] = out;
     }
@@ -3114,6 +3119,15 @@ const JS = `
   // The top bar's search box is the entry point: focusing it, clicking it or typing in it opens the modal.
   $("search").addEventListener("focus", () => { if (!suppressOpen) openSearch(); });
   $("search").addEventListener("pointerdown", () => openSearch());
+  // The browser's own focus move to #search (on mousedown, and on the mousedown a tap sends) would land on
+  // the inert box and leave focus on body. Keeping the default stops it, so focus stays in the modal.
+  $("search").addEventListener("mousedown", (event) => event.preventDefault());
+  $("search").addEventListener("keydown", (event) => {
+    if ((event.key === "Enter" || event.key === "ArrowDown") && !searchOpen) {
+      event.preventDefault();
+      openSearch();
+    }
+  });
   $("search").addEventListener("input", () => {
     openSearch();
     applyFilters();
@@ -3137,7 +3151,17 @@ const JS = `
       }
     }
   });
-  modal.addEventListener("keydown", onDialogKey);
+  // Escape and Tab are handled for the whole document while the modal is open, so they still work when
+  // focus has been lost to body. Capture runs first, so the Escape handlers below see the key handled.
+  document.addEventListener("keydown", (event) => { if (searchOpen) onDialogKey(event); }, true);
+  // Focus that falls to nothing while the modal is open (a press on text in it, or a phone tap whose
+  // compatibility mousedown lands on the sheet, which covers the top bar) comes back to the input.
+  document.addEventListener("focusout", (event) => {
+    if (!searchOpen || event.relatedTarget) return;
+    queueMicrotask(() => {
+      if (searchOpen && !modal.contains(document.activeElement)) $("sm-input").focus();
+    });
+  });
   modal.addEventListener("pointerdown", (event) => { backdropDown = event.target === modal; });
   modal.addEventListener("mousedown", (event) => { if (event.target === modal) event.preventDefault(); });
   modal.addEventListener("click", (event) => {
@@ -3304,6 +3328,7 @@ const JS = `
     paneSplit = clampSplit(value);
     document.documentElement.style.setProperty("--split", String(paneSplit));
     splitDivider.setAttribute("aria-valuenow", String(paneSplit));
+    splitDivider.setAttribute("aria-valuetext", paneSplit + "% graph");
   }
   // Restored before the first fit: the graph was laid out at the default width, so resize it now.
   let paneSplit = SPLIT_DEFAULT;
@@ -3335,15 +3360,22 @@ const JS = `
       if (view === "graph") cy.resize();
     });
   });
-  function endSplitDrag(event) {
-    if (event.pointerId !== splitPointer) return;
+  // Ends the drag however it stops. Without this, a lost capture (a hidden divider, a pointer lifted
+  // outside the window) leaves dragging-split on, and #graph ignores the pointer until the next drag.
+  function stopSplitDrag() {
     splitPointer = null;
     document.body.classList.remove("dragging-split");
     storeSplit();
     finishSplit();
   }
+  function endSplitDrag(event) {
+    if (event.pointerId !== splitPointer) return;
+    stopSplitDrag();
+  }
   splitDivider.addEventListener("pointerup", endSplitDrag);
   splitDivider.addEventListener("pointercancel", endSplitDrag);
+  splitDivider.addEventListener("lostpointercapture", endSplitDrag);
+  window.addEventListener("blur", () => { if (splitPointer !== null) stopSplitDrag(); });
   splitDivider.addEventListener("dblclick", () => {
     applySplit(SPLIT_DEFAULT);
     storeSplit();
@@ -3576,6 +3608,8 @@ const JS = `
 
   $("reset").addEventListener("click", () => {
     $("search").value = "";
+    // The modal's own box shows the same query; applyFilters() below re-renders its list and status.
+    $("sm-input").value = "";
     $("filter-type").value = "";
     $("filter-trust").value = "";
     $("filter-fresh").value = "";
@@ -3712,7 +3746,7 @@ const JS = `
   const isShown = (el) => !!el && el.getClientRects().length > 0;
   const viewButton = (name) => $("view-switch").querySelector('button[data-view="' + name + '"]');
   const SHORTCUTS = [
-    { id: "search", key: "/", label: "Search", el: $("search"), run: () => ($("search-modal").hidden ? $("search") : $("sm-input")).focus(), when: () => true },
+    { id: "search", key: "/", label: "Search", el: $("search"), run: () => (modal.hidden ? openSearch() : $("sm-input").focus()), when: () => true },
     { id: "view-graph", key: "1", label: "Graph view", el: viewButton("graph"), run: () => viewButton("graph").click(), when: () => true },
     { id: "view-tree", key: "2", label: "Tree view", el: viewButton("tree"), run: () => viewButton("tree").click(), when: () => true },
     { id: "view-table", key: "3", label: "Table view", el: viewButton("table"), run: () => viewButton("table").click(), when: () => true },

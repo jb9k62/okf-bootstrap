@@ -347,7 +347,8 @@ describe('viewer views', { timeout: 120_000 }, () => {
 
   view('a contents link opens its concept and closes the modal', async () => {
     await page.focus('#search');
-    await page.keyboard.type('retry policy');
+    // A concept with level-2 headings: its contents (the title is left out) are the links under test.
+    await page.keyboard.type('full jitter');
     await page.waitForSelector('#search-modal:not([hidden]) #sm-list .sr-item');
     const tocLinks = page.locator('#sm-toc .sm-toc-link');
     assert.ok((await tocLinks.count()) > 0, 'the first result has contents');
@@ -814,19 +815,27 @@ describe('viewer views', { timeout: 120_000 }, () => {
   const resetSplit = async (p: Page) => {
     await p.locator('#divider').dblclick();
   };
-  // A fresh viewer page, optionally with a script run before the viewer (to break storage).
-  async function openViewer(init?: () => void): Promise<Page> {
-    const p = await browser!.newPage({ viewport: { width: 1400, height: 800 } });
-    if (init) await p.addInitScript(init);
+  // A fresh viewer page in its own context. Optional: an init script (to break storage), a viewport,
+  // touch, a bundle file and a concept hash. Its page errors go to the shared list before navigation,
+  // so a load error is not missed. The caller closes it with p.context().close().
+  type ViewerOptions = { init?: () => void; viewport?: { width: number; height: number }; hasTouch?: boolean; file?: string; hash?: string };
+  async function openViewer(opts: ViewerOptions = {}): Promise<Page> {
+    const context = await browser!.newContext({ viewport: opts.viewport ?? { width: 1400, height: 800 }, hasTouch: opts.hasTouch ?? false });
+    const p = await context.newPage();
+    p.on('pageerror', (e) => pageErrors.push(e.message));
+    if (opts.init) await p.addInitScript(opts.init);
     await p.route(/^https:/, (route) => {
       const body = localLib(route.request().url());
       if (body) return route.fulfill({ contentType: 'text/javascript', body });
       return route.continue();
     });
-    await p.goto('file://' + path.join(dir, 'viz.html'));
+    await p.goto('file://' + (opts.file ?? path.join(dir, 'viz.html')) + (opts.hash ?? ''));
     await p.waitForFunction('window.__OKF_VIEW__ && window.marked && window.cytoscape', undefined, { timeout: 20_000 });
     return p;
   }
+  // The id of the focused element ('' when focus is on body).
+  const activeId = (p: Page) => p.evaluate(() => document.activeElement?.id ?? '');
+  const modalShown = (p: Page) => p.isVisible('#search-modal');
 
   view('A: dragging the divider widens the graph pane and updates aria-valuenow', async () => {
     await page.click('[data-view=graph]');
@@ -920,16 +929,16 @@ describe('viewer views', { timeout: 120_000 }, () => {
   });
 
   view('A: with sessionStorage throwing the page loads without errors and the divider still drags', async () => {
-    const p = await openViewer(() => {
-      Object.defineProperty(window, 'sessionStorage', {
-        configurable: true,
-        get() {
-          throw new DOMException('storage blocked', 'SecurityError');
-        },
-      });
+    const p = await openViewer({
+      init: () => {
+        Object.defineProperty(window, 'sessionStorage', {
+          configurable: true,
+          get() {
+            throw new DOMException('storage blocked', 'SecurityError');
+          },
+        });
+      },
     });
-    const errors: string[] = [];
-    p.on('pageerror', (e) => errors.push(e.message));
     try {
       assert.equal(
         await p.evaluate(() => {
@@ -954,9 +963,168 @@ describe('viewer views', { timeout: 120_000 }, () => {
       await p.mouse.up();
       assert.ok((await paneWidth(p)) - before > 250, 'the drag still resizes the pane');
       assert.ok((await splitValue(p)) > 40, 'aria-valuenow follows the drag');
-      assert.deepEqual(errors, [], 'page errors');
     } finally {
-      await p.close();
+      await p.context().close();
+    }
+  });
+
+  view('A: the divider names its value, and a stored width is applied before the viewer script runs', async () => {
+    const p = await openViewer({
+      init: () => {
+        try {
+          sessionStorage.setItem('okf-split', '55');
+        } catch {}
+      },
+    });
+    try {
+      assert.equal(await p.getAttribute('#divider', 'aria-valuetext'), '55% graph', 'stored width is read back');
+      assert.equal(await p.evaluate(() => document.documentElement.style.getPropertyValue('--split')), '55');
+      await p.focus('#divider');
+      await p.keyboard.press('ArrowRight');
+      assert.equal(await p.getAttribute('#divider', 'aria-valuetext'), '57% graph', 'kept in sync with the key');
+    } finally {
+      await p.context().close();
+    }
+  });
+
+  // B: the search modal. Focus must stay in it, and it must close from wherever focus is.
+  view('search: a real click on the box opens the modal with focus in it, and typing searches', async () => {
+    const p = await openViewer();
+    try {
+      await p.click('#search');
+      assert.equal(await modalShown(p), true, 'the modal opens');
+      assert.equal(await activeId(p), 'sm-input', 'focus is in the modal input, not on body');
+      await p.keyboard.type('parcel');
+      assert.equal(await p.inputValue('#sm-input'), 'parcel');
+      assert.ok((await p.locator('#sm-list .sr-item').count()) > 0, 'results appear');
+      await p.keyboard.press('Escape');
+      assert.equal(await modalShown(p), false, 'Escape closes it');
+    } finally {
+      await p.context().close();
+    }
+  });
+
+  view('search: a tap on the box at a phone width opens the modal with focus in it', async () => {
+    const p = await openViewer({ viewport: { width: 390, height: 844 }, hasTouch: true });
+    try {
+      await p.tap('#search');
+      assert.equal(await modalShown(p), true, 'the modal opens');
+      assert.equal(await activeId(p), 'sm-input', 'focus is in the modal input, not on body');
+      await p.keyboard.type('parcel');
+      assert.equal(await p.inputValue('#sm-input'), 'parcel');
+      assert.ok((await p.locator('#sm-list .sr-item').count()) > 0, 'results appear');
+      await p.keyboard.press('Escape');
+      assert.equal(await modalShown(p), false, 'Escape closes it');
+    } finally {
+      await p.context().close();
+    }
+  });
+
+  view('search: a real click on the modal text keeps focus in it, and Tab and Escape stay with the modal', async () => {
+    const p = await openViewer();
+    try {
+      await p.click('#search');
+      // A real click on text that cannot take focus would leave focus on body; it comes back to the input.
+      await p.click('#sm-status');
+      assert.equal(await activeId(p), 'sm-input', 'focus stays in the modal input');
+      await p.keyboard.press('Tab');
+      assert.equal(await p.evaluate(() => !!document.activeElement?.closest('#search-modal')), true, 'Tab stays inside');
+      await p.click('#sm-status');
+      await p.keyboard.press('Escape');
+      assert.equal(await modalShown(p), false, 'Escape closes it');
+    } finally {
+      await p.context().close();
+    }
+  });
+
+  view('an expanded diagram stays expanded when Escape closes the search modal', async () => {
+    const p = await openViewer({ hash: '#parcel-tracker/architecture' });
+    try {
+      await p.waitForSelector('#detail-body .mermaid[data-state="rendered"]', { timeout: 20_000 });
+      await p.click('#detail-body .mermaid button[data-act="expand"]');
+      assert.equal(await p.locator('#detail-body .mermaid.expanded').count(), 1, 'the diagram is expanded');
+      await p.keyboard.press('Control+/');
+      assert.equal(await modalShown(p), true, 'the modal opens');
+      await p.keyboard.press('Escape');
+      assert.equal(await modalShown(p), false, 'the modal closes');
+      assert.equal(await p.locator('#detail-body .mermaid.expanded').count(), 1, 'the diagram stays expanded');
+      await p.keyboard.press('Escape');
+      assert.equal(await p.locator('#detail-body .mermaid.expanded').count(), 0, 'with nothing else open, Escape collapses it');
+    } finally {
+      await p.context().close();
+    }
+  });
+
+  // A lost capture or a window blur during a drag must end it, even when the button comes up somewhere
+  // else. The capture is released for real (releasePointerCapture makes the browser fire lostpointercapture),
+  // the pointer moves onto the graph, and only then is the button released. A window blur is dispatched,
+  // since a headless run cannot switch windows. The press, the drag and the release are real input.
+  view('A: a drag whose capture is lost, or whose window blurs, ends and the graph takes the pointer again', async () => {
+    const p = await openViewer();
+    try {
+      await p.click('[data-view=graph]');
+      await p.evaluate(() => {
+        document.getElementById('divider')!.addEventListener('pointerdown', (e) => {
+          (window as unknown as { pid: number }).pid = e.pointerId;
+        });
+      });
+      for (const lose of ['lostpointercapture', 'blur'] as const) {
+        // Measured each time: the first drag moved the divider.
+        const box = (await p.locator('#divider').boundingBox())!;
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        await p.mouse.move(x, y);
+        await p.mouse.down();
+        await p.mouse.move(x + 80, y, { steps: 4 });
+        assert.equal(await p.evaluate(() => document.body.classList.contains('dragging-split')), true, 'the drag is under way');
+        await p.evaluate((kind) => {
+          if (kind === 'blur') {
+            window.dispatchEvent(new Event('blur'));
+          } else {
+            document.getElementById('divider')!.releasePointerCapture((window as unknown as { pid: number }).pid);
+          }
+        }, lose);
+        // Off the divider, so its own pointerup cannot end the drag.
+        await p.mouse.move(x - 200, y, { steps: 2 });
+        await p.mouse.up();
+        assert.equal(await p.evaluate(() => document.body.classList.contains('dragging-split')), false, `${lose} ends the drag`);
+        assert.notEqual(await p.evaluate(() => getComputedStyle(document.getElementById('graph')!).pointerEvents), 'none', `${lose}: the graph takes the pointer`);
+      }
+    } finally {
+      await p.context().close();
+    }
+  });
+
+  // The contents of a concept link to the headings the reading pane gives ids to. A heading with a link and
+  // emphasis in it is the case where the two used to disagree. The demo is pinned by the memory bundle, so the
+  // test works on a copy of it with that heading added.
+  view('contents: a heading with markup is found by its contents link', async () => {
+    const src = path.join(dir, 'markup-okf');
+    fs.cpSync(path.join(ROOT, 'examples', 'demo', 'okf'), src, { recursive: true });
+    const filler = Array.from({ length: 60 }, (_, i) => `Filler line ${i + 1} keeps the heading below the fold.`).join('\n\n');
+    fs.appendFileSync(
+      path.join(src, 'parcel-tracker', 'retry-policy.md'),
+      `\n## The [retry](https://example.com/retry) _policy_\n\n${filler}\n`,
+    );
+    const file = path.join(dir, 'markup.html');
+    const built = spawnSync(process.execPath, [VIEWER, src, '--out', file], { cwd: ROOT, encoding: 'utf8' });
+    assert.equal(built.status, 0, built.stdout + built.stderr);
+
+    const p = await openViewer({ file });
+    try {
+      await p.keyboard.press('Control+/');
+      await p.keyboard.type('retry');
+      await p.hover('#sm-list .sr-item[data-id="parcel-tracker/retry-policy"]');
+      const contents = await p.$$eval('#sm-toc .sm-toc-link', (els) => els.map((e) => e.textContent));
+      assert.ok(contents.includes('The retry policy'), `the contents list the rendered heading: ${JSON.stringify(contents)}`);
+      assert.equal(contents.includes('Retry policy'), false, 'the title is not in the contents');
+      await p.locator('#sm-toc .sm-toc-link', { hasText: /^The retry policy$/ }).click();
+      assert.equal(await modalShown(p), false, 'the contents link closes the modal');
+      await p.waitForFunction(() => !!document.querySelector('#detail-body #the-retry-policy'), undefined, { timeout: 10_000 });
+      const top = await p.evaluate(() => document.getElementById('the-retry-policy')!.getBoundingClientRect().top);
+      assert.ok(top >= 0 && top < 200, `the heading is scrolled to the top of the pane (top ${top})`);
+    } finally {
+      await p.context().close();
     }
   });
 });
@@ -1056,6 +1224,38 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
     assert.equal(await page.evaluate(() => document.activeElement?.id), 'sm-input');
     await page.keyboard.press('Escape');
     assert.equal(await page.isVisible('#search-modal'), false);
+  });
+
+  shortcut('Ctrl+/ opens the search again after Escape, and Enter or ArrowDown on the box does too', async () => {
+    await press('Control+/');
+    await page.keyboard.type('parcel');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isVisible('#search-modal'), false, 'Escape closes it');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'search', 'focus returns to the box');
+    await press('Control+/');
+    assert.equal(await page.isVisible('#search-modal'), true, 'Ctrl+/ reopens it');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'sm-input');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Enter');
+    assert.equal(await page.isVisible('#search-modal'), true, 'Enter on the box opens it');
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('ArrowDown');
+    assert.equal(await page.isVisible('#search-modal'), true, 'ArrowDown on the box opens it');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isVisible('#search-modal'), false);
+  });
+
+  shortcut('Ctrl+j while the modal is open clears its box too and shows the hint', async () => {
+    await press('Control+/');
+    await page.keyboard.type('parcel');
+    assert.ok((await page.locator('#sm-list .sr-item').count()) > 0, 'results appear before the reset');
+    await press('Control+j');
+    assert.equal(await page.inputValue('#sm-input'), '', 'the modal box is cleared');
+    assert.equal(await page.inputValue('#search'), '', 'the top-bar box is cleared');
+    assert.equal(await page.locator('#sm-list .sr-item').count(), 0, 'no results are left');
+    assert.equal(await page.textContent('#sm-status'), 'Type to search', 'the hint is shown');
+    assert.equal(await page.isVisible('#search-modal'), true, 'the modal stays open');
+    await page.keyboard.press('Escape');
   });
 
   shortcut('Ctrl+1, 2 and 3 switch the view', async () => {

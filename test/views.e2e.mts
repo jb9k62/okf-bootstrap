@@ -1271,13 +1271,13 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
         aria: e.el?.getAttribute('aria-keyshortcuts') ?? null,
       })),
     );
-    assert.equal(list.length, 10);
+    assert.equal(list.length, 11);
     assert.equal(new Set(list.map((e) => e.id)).size, list.length, 'ids are unique');
     assert.equal(new Set(list.map((e) => e.key)).size, list.length, 'keys are unique');
     assert.ok(list.every((e) => e.hasEl), 'every entry has an element');
     assert.deepEqual(
       list.map((e) => e.key),
-      ['/', '1', '2', '3', 'f', 'd', 'r', 't', 'n', 'x'],
+      ['/', '1', '2', '3', 'f', 'd', 'r', 't', 'n', 'x', '?'],
     );
     assert.deepEqual(
       list.filter((e) => e.ctrl !== null).map((e) => [e.id, e.ctrl]),
@@ -1286,7 +1286,7 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
     );
     assert.deepEqual(
       list.map((e) => e.aria),
-      ['/ Control+K', '1', '2', '3', 'f', 'd', 'r', 't', 'n', 'x'],
+      ['/ Control+K', '1', '2', '3', 'f', 'd', 'r', 't', 'n', 'x', '?'],
     );
   });
 
@@ -1665,5 +1665,38 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
     await press('t');
     assert.match((await titles()).theme, /\(t\)$/, 'the theme title keeps its key after a switch');
     await press('t');
+  });
+
+  shortcut('the ? button lists the keys on hover and pins on click, and its list comes from the registry', async () => {
+    const panelShown = () => page.isVisible('#help-panel');
+    const rows = () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll('#help-list li')].map((li) => ({
+          key: li.querySelector('kbd')?.textContent ?? '',
+          what: li.querySelector('span')?.textContent ?? '',
+        })),
+      );
+    assert.equal(await panelShown(), false, 'the panel starts closed');
+    assert.equal(await page.getAttribute('#help-toggle', 'aria-keyshortcuts'), '?', 'the button names its key');
+    assert.equal(await page.getAttribute('#help-toggle', 'aria-expanded'), 'false');
+    await page.hover('#help-toggle');
+    assert.equal(await panelShown(), true, 'hover opens it');
+    assert.equal(await page.getAttribute('#help-toggle', 'aria-expanded'), 'true');
+    const list = await rows();
+    assert.equal(list.length, 11, 'one row per shortcut');
+    assert.deepEqual(list[0], { key: '/ or Ctrl+K', what: 'Search' });
+    assert.deepEqual(list[list.length - 1], { key: '?', what: 'Show keys on the buttons' });
+    await page.hover('#statusbar');
+    assert.equal(await panelShown(), false, 'a hover preview closes when the pointer leaves');
+    await page.click('#help-toggle');
+    await page.hover('#statusbar');
+    assert.equal(await panelShown(), true, 'a click pins it open');
+    await page.keyboard.press('Escape');
+    assert.equal(await panelShown(), false, 'Escape unpins it');
+    // The ? key still shows the badges on the buttons; the help button keeps its own glyph.
+    await press('?');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('kbd-hints')), true);
+    assert.deepEqual((await visibleBadges()).sort(), ['1', '2', '3', 'd', 'f', 'r', 't']);
+    await page.keyboard.press('Escape');
   });
 });

@@ -844,6 +844,14 @@ ${CSS}
     </div>
     <button id="reading-toggle" type="button" aria-pressed="false" title="Reading view: hide the graph and widen the concept (r)">Reading</button>
     <button id="theme-toggle" type="button" title="Switch to dark theme (t)">Dark</button>
+    <div class="popover-wrap popover-end">
+      <button id="help-toggle" type="button" aria-expanded="false" aria-controls="help-panel" aria-label="Keyboard shortcuts">?</button>
+      <div id="help-panel" class="popover help-popover" role="group" aria-label="Keyboard shortcuts" hidden>
+        <p class="help-lead">Navigate with the keyboard</p>
+        <ul id="help-list" class="help-list"></ul>
+        <p class="help-note">Press <kbd class="keycap">?</kbd> to show these keys on the buttons.</p>
+      </div>
+    </div>
   </div>
 </header>
 <div id="search-modal" class="sm-backdrop" hidden>
@@ -1682,7 +1690,7 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
 
 /* B: shortcuts */
 /* Key hints (shown while ? is on): a badge pinned to the top-right corner of each target, so no layout shifts */
-.segmented button, #filters-toggle, #display-toggle, #reading-toggle, #theme-toggle, #hood-toggle, #reset { position: relative; }
+.segmented button, #filters-toggle, #display-toggle, #reading-toggle, #theme-toggle, #help-toggle, #hood-toggle, #reset { position: relative; }
 .kbd-hint {
   position: absolute;
   top: -8px;
@@ -1701,6 +1709,24 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
 body:not(.kbd-hints) .kbd-hint, .kbd-hint[hidden] { display: none; }
 /* Phones and tablets have no Ctrl key to hold, so the hints stay off there (the keys still work) */
 @media (pointer: coarse) { .kbd-hint { display: none !important; } }
+/* Help: the ? in the bar. Its panel lists every key, so the shortcut that shows the badges is discoverable. */
+#help-toggle { width: 32px; padding: 0; font-weight: 700; }
+.help-popover { gap: 8px; min-width: 260px; max-height: calc(100vh - 90px); overflow-y: auto; }
+.help-lead, .help-note { margin: 0; font-size: 12px; color: var(--text-muted); }
+.help-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.help-list li { display: flex; align-items: baseline; gap: 10px; font-size: 13px; }
+.help-list .keycap { min-width: 34px; text-align: center; }
+.keycap {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: 600 11px/16px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  white-space: nowrap;
+}
 
 @media (max-width: 820px) {
   main { flex-direction: column; }
@@ -3204,10 +3230,16 @@ const JS = `
   const panels = [
     { button: $("filters-toggle"), panel: $("filters-panel") },
     { button: $("display-toggle"), panel: $("display-panel") },
+    { button: $("help-toggle"), panel: $("help-panel") },
   ];
+  // The help panel is the one that also previews on hover, so the keys are one gesture away;
+  // a click pins it open until Escape, an outside click or another click on the button.
+  const helpPanel = panels.find((entry) => entry.button.id === "help-toggle");
+  let helpPinned = false;
   function closePanel(entry) {
     entry.panel.hidden = true;
     entry.button.setAttribute("aria-expanded", "false");
+    if (entry === helpPanel) helpPinned = false;
   }
   function openPanel(entry) {
     for (const other of panels) if (other !== entry) closePanel(other);
@@ -3215,11 +3247,24 @@ const JS = `
     entry.button.setAttribute("aria-expanded", "true");
   }
   for (const entry of panels) {
+    if (entry === helpPanel) continue;
     entry.button.addEventListener("click", () => {
       if (entry.panel.hidden) openPanel(entry);
       else closePanel(entry);
     });
   }
+  for (const el of [helpPanel.button, helpPanel.panel]) {
+    el.addEventListener("pointerenter", () => openPanel(helpPanel));
+    el.addEventListener("pointerleave", () => { if (!helpPinned) closePanel(helpPanel); });
+  }
+  // Focus opens it too, so the keys are reachable without a pointer (the button keeps its own click).
+  helpPanel.button.addEventListener("focus", () => openPanel(helpPanel));
+  helpPanel.button.addEventListener("blur", () => { if (!helpPinned) closePanel(helpPanel); });
+  helpPanel.button.addEventListener("click", () => {
+    helpPinned = !helpPinned;
+    if (helpPinned) openPanel(helpPanel);
+    else closePanel(helpPanel);
+  });
   // A click anywhere outside a button and its panel closes it. Escape closes it too, unless a
   // handler already used the key (the search box closing its results list).
   document.addEventListener("pointerdown", (event) => {
@@ -3767,9 +3812,11 @@ const JS = `
     { id: "hood", key: "n", label: "Neighbourhood", el: $("hood-toggle"), run: () => $("hood-toggle").click(), when: () => view === "graph" },
     { id: "reset", key: "x", label: "Reset", el: $("reset"), run: () => $("reset").click(), when: () => isShown($("reset")) },
   ];
+  // '?' toggles the badges on the other buttons; its own button (the ? in the bar) is the registry's
+  // target for it, so the bar names the key and the help panel can be built from this one list.
+  const HELP = { id: "help", key: "?", label: "Show keys on the buttons", el: $("help-toggle"), run: () => setHints(!hintsOn), when: () => true };
+  SHORTCUTS.push(HELP);
   window.__OKF_SHORTCUTS__ = SHORTCUTS;
-  // '?' is not a target: it toggles the badges. It is listed here so the key handler finds it like the rest.
-  const HELP = { id: "help", when: () => true, run: () => setHints(!hintsOn) };
 
   // The search box is an input and cannot hold a badge, so its hint is the placeholder. When the
   // hint goes away, the placeholder returns to the one the search-mode control sets.
@@ -3785,13 +3832,27 @@ const JS = `
   }
   syncKeyshortcuts();
   for (const entry of SHORTCUTS) {
-    if (entry.id === "search") continue;
+    // Search is an input, and the help button is the ? itself, so neither takes a badge.
+    if (entry.id === "search" || entry.id === "help") continue;
     entry.badge = document.createElement("kbd");
     entry.badge.className = "kbd-hint";
     entry.badge.setAttribute("aria-hidden", "true");
     entry.badge.textContent = entry.key;
     entry.el.append(entry.badge);
   }
+
+  // The help panel's list comes from the same registry, so a new shortcut cannot drift from what
+  // the panel shows. Ctrl+K shares the search row with '/', since both open the same thing.
+  $("help-list").replaceChildren(...SHORTCUTS.map((entry) => {
+    const li = document.createElement("li");
+    const cap = document.createElement("kbd");
+    cap.className = "keycap";
+    cap.textContent = entry.ctrl ? entry.key + " or Ctrl+" + entry.ctrl.toUpperCase() : entry.key;
+    const what = document.createElement("span");
+    what.textContent = entry.label;
+    li.append(cap, what);
+    return li;
+  }));
 
   let hintsOn = false;
   // Badges are reattached and re-shown here: a theme switch rewrites the theme button's text,

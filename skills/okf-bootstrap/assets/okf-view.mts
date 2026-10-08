@@ -120,7 +120,7 @@ const DEFAULT_WIDGETS_BUNDLE = fileURLToPath(
 function rankScript(): string {
   const source = fs.readFileSync(new URL('./okf-rank.mts', import.meta.url), 'utf8');
   const js = stripTypeScriptTypes(source).replace(/^export /gm, '');
-  const api = 'buildEntry, buildIndex, search, snippet, freshness, freshnessLabel, matchesFilters, NO_FILTERS';
+  const api = 'buildEntry, buildIndex, search, snippet, freshness, freshnessLabel, matchesFilters, NO_FILTERS, stripCode, HEADING_RE';
   // A "</script" inside the code would end the inline block early.
   return `window.OKF_RANK = (() => {\n${js}\nreturn { ${api} };\n})();`.replace(/<\/script/gi, '<\\/script');
 }
@@ -779,7 +779,7 @@ ${CSS}
     <span>OKF bundle</span>
   </div>
   <div class="controls">
-    <input id="search" type="search" placeholder="Search concepts" aria-label="Search concepts" role="combobox" aria-expanded="false" aria-controls="search-results" autocomplete="off">
+    <input id="search" type="search" placeholder="Search concepts" aria-label="Search concepts" role="combobox" aria-expanded="false" aria-haspopup="dialog" aria-controls="sm-list" autocomplete="off">
     <div id="view-switch" class="segmented" role="group" aria-label="View">
       <button type="button" data-view="graph" aria-pressed="true">Graph</button>
       <button type="button" data-view="tree" aria-pressed="false">Tree</button>
@@ -844,7 +844,27 @@ ${CSS}
     <button id="theme-toggle" type="button" title="Switch to dark theme">Dark</button>
   </div>
 </header>
-<div id="search-results" role="listbox" aria-label="Ranked results" hidden></div>
+<div id="search-modal" class="sm-backdrop" hidden>
+  <div class="sm-dialog" role="dialog" aria-modal="true" aria-labelledby="sm-title">
+    <header class="sm-head">
+      <h2 id="sm-title" class="sm-visually-hidden">Search concepts</h2>
+      <input id="sm-input" type="search" placeholder="Search concepts" aria-label="Search concepts" role="combobox" aria-expanded="true" aria-controls="sm-list" aria-autocomplete="list" autocomplete="off">
+      <span id="sm-status" aria-live="polite"></span>
+      <button id="sm-close" type="button" aria-label="Close search">&times;</button>
+    </header>
+    <div class="sm-body">
+      <div id="sm-list" role="listbox" aria-label="Results"></div>
+      <section id="sm-preview" aria-label="Preview">
+        <div class="sm-preview-head">
+          <h3 id="sm-preview-title"></h3>
+          <button id="sm-open" type="button">Open concept</button>
+        </div>
+        <nav id="sm-toc" aria-label="Contents of the previewed concept" hidden></nav>
+        <div id="sm-text" class="prose"></div>
+      </section>
+    </div>
+  </div>
+</div>
 
 <main>
   <section id="graph-pane" aria-label="Concept graph">
@@ -1046,18 +1066,91 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 }
 .filter-chip:hover { background: var(--surface-2); }
 .filter-chip span[aria-hidden] { font-size: 14px; line-height: 1; }
-#search-results {
+/* Search is a wide modal: results on the left, a preview (contents, then the start of the concept) on the right */
+.sm-backdrop {
   position: fixed;
-  z-index: 40;
-  max-height: min(60vh, 520px);
-  overflow-y: auto;
-  background: var(--surface);
-  border: 1px solid var(--border-strong);
-  border-radius: 8px;
-  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.22);
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 8vh 16px 16px;
+  background: rgba(15, 23, 42, 0.45);
 }
-#search-results[hidden] { display: none; }
-.sr-head { padding: 8px 12px; font-size: 12px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+.sm-backdrop[hidden] { display: none; }
+.sm-dialog {
+  width: min(1100px, 100%);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.3);
+  overflow: hidden;
+}
+.sm-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+.sm-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-bottom: 1px solid var(--border); }
+#sm-input { flex: 1 1 auto; min-width: 0; font-size: 16px; }
+#sm-status { flex: 0 0 auto; font-size: 12px; color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+#sm-close { flex: 0 0 auto; font-size: 20px; line-height: 1; padding: 4px 10px; }
+.sm-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(280px, 2fr) 3fr;
+  grid-template-rows: minmax(0, 1fr);
+}
+#sm-list { min-height: 0; overflow-y: auto; border-right: 1px solid var(--border); }
+#sm-preview { min-height: 0; overflow-y: auto; padding: 14px 22px 24px; }
+.sm-preview-head { display: flex; align-items: center; gap: 12px; }
+#sm-preview-title { flex: 1 1 auto; min-width: 0; margin: 0; font-size: 18px; color: var(--heading); overflow-wrap: anywhere; }
+#sm-open { flex: 0 0 auto; }
+#sm-open[hidden] { display: none; }
+#sm-toc {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 12px 0 14px;
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+#sm-toc[hidden] { display: none; }
+.sm-toc-link {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 3px 6px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+}
+.sm-toc-link:hover, .sm-toc-link:focus-visible { background: var(--surface-2); color: var(--accent); }
+.sm-more {
+  margin-top: 18px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border-strong);
+  font-size: 13px;
+  font-style: italic;
+  color: var(--text-muted);
+}
+#sm-list .sr-item { padding: 10px 14px; }
+#sm-list .sr-snippet { white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.sr-item:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .sr-item {
   display: block;
   width: 100%;
@@ -1077,6 +1170,16 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .sr-pill { font-size: 11px; line-height: 1; padding: 3px 6px; border: 1px solid currentColor; border-radius: 999px; }
 .sr-snippet { margin-top: 4px; font-size: 13px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sr-empty { padding: 12px; color: var(--text-muted); font-size: 14px; }
+/* On a phone the modal fills the window, with the results above the preview */
+@media (max-width: 820px) {
+  .sm-backdrop { padding: 0; }
+  .sm-dialog { width: 100%; height: 100%; max-height: none; border: 0; border-radius: 0; }
+  .sm-head { flex-wrap: wrap; }
+  #sm-status { order: 3; flex: 1 1 100%; white-space: normal; }
+  .sm-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1.3fr); }
+  #sm-list { border-right: 0; border-bottom: 1px solid var(--border); }
+  #sm-preview { padding: 12px 16px 24px; }
+}
 
 /* Layout: graph on the left, reading pane on the right */
 main { flex: 1; min-height: 0; display: flex; }
@@ -2637,7 +2740,19 @@ const JS = `
   }
 
   const PILL_COLOURS = { "human-reviewed": "#16a34a", "machine-confirmed": "#2563eb", unverified: "#d97706", stale: "#dc2626", fresh: "#16a34a", "no-expiry": "#94a3b8" };
+  const RESULT_LIMIT = 30;
+  const PREVIEW_LINES = 50;
+  const TICK = String.fromCharCode(96).repeat(3);
   let activeResult = -1;
+  let searchOpen = false;
+  // Set while focus is handed back to the search box on close, so that focusing it does not reopen the modal.
+  let suppressOpen = false;
+  let savedOverflow = "";
+  let backdropDown = false;
+  let previewId = null;
+  let pendingSection = null;
+  const tocCache = {};
+  const modal = $("search-modal");
 
   function pill(text, colour) {
     const el = document.createElement("span");
@@ -2647,80 +2762,317 @@ const JS = `
     return el;
   }
 
-  function placeResults() {
-    const box = $("search").getBoundingClientRect();
-    const panel = $("search-results");
-    const width = Math.min(Math.max(box.width, 380), window.innerWidth - 16);
-    panel.style.top = box.bottom + 4 + "px";
-    panel.style.width = width + "px";
-    panel.style.left = Math.max(8, Math.min(box.left, window.innerWidth - width - 8)) + "px";
+  function listRows() {
+    return [...$("sm-list").querySelectorAll(".sr-item")];
   }
 
-  function hideResults() {
-    $("search-results").hidden = true;
+  // While the modal is open, the page behind it cannot be reached by mouse, keyboard or screen reader.
+  function behindModal() {
+    return [document.querySelector(".topbar"), document.querySelector("main"), $("statusbar")];
+  }
+
+  function openSearch() {
+    if (searchOpen) return;
+    searchOpen = true;
+    runSearch();
+    $("sm-input").value = $("search").value;
+    $("sm-input").placeholder = $("search").placeholder;
+    modal.hidden = false;
+    for (const el of behindModal()) el.inert = true;
+    savedOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    document.body.classList.add("search-open");
+    $("search").setAttribute("aria-expanded", "true");
+    renderResults();
+    $("sm-input").focus();
+  }
+
+  function closeSearch(restoreFocus) {
+    if (!searchOpen) return;
+    searchOpen = false;
+    modal.hidden = true;
+    for (const el of behindModal()) el.inert = false;
+    document.body.style.overflow = savedOverflow;
+    document.body.classList.remove("search-open");
     $("search").setAttribute("aria-expanded", "false");
-    activeResult = -1;
+    if (restoreFocus) {
+      suppressOpen = true;
+      $("search").focus();
+      suppressOpen = false;
+    }
   }
 
-  function setActiveResult(index) {
-    const rows = $("search-results").querySelectorAll(".sr-item");
-    if (rows.length === 0) return;
+  // Opening a result closes the modal, so the concept is shown behind it. A contents link can also
+  // name a section, which is scrolled to once the concept is shown.
+  function openFromSearch(id, slug) {
+    closeSearch(true);
+    pendingSection = slug || null;
+    open(id);
+    if (current === id) flushSection();
+  }
+
+  function flushSection() {
+    const slug = pendingSection;
+    pendingSection = null;
+    if (!slug) return;
+    const el = document.getElementById(slug);
+    if (el && $("detail-body").contains(el)) el.scrollIntoView({ block: "start" });
+  }
+
+  function focusables() {
+    return [...modal.querySelectorAll("button:not([disabled]), input:not([disabled]), a[href]")]
+      .filter((el) => el.getClientRects().length > 0);
+  }
+
+  // Tab cycles inside the dialog: the page behind it is inert, so the cycle must not leak to the browser.
+  function trapTab(event) {
+    const items = focusables();
+    if (items.length === 0) return;
+    const first = items[0];
+    const last = items[items.length - 1];
+    const active = document.activeElement;
+    const inside = modal.querySelector(".sm-dialog").contains(active);
+    if (event.shiftKey && (!inside || active === first)) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (!inside || active === last)) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
+  function onDialogKey(event) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeSearch(true);
+    } else if (event.key === "Tab") {
+      trapTab(event);
+    } else if ((event.key === "ArrowDown" || event.key === "ArrowUp") && event.target.closest && event.target.closest(".sr-item")) {
+      event.preventDefault();
+      setActive(activeResult + (event.key === "ArrowDown" ? 1 : -1));
+      const row = listRows()[activeResult];
+      if (row) row.focus();
+    }
+  }
+
+  // The contents of a concept, from its own headings (levels 1 to 3, fenced code ignored). Cached per concept.
+  function tocFor(id) {
+    if (!tocCache[id]) {
+      const seen = new Set();
+      const out = [];
+      for (const line of Rank.stripCode(bundle.bodies[id] || "", false).split("\\n")) {
+        const m = line.match(Rank.HEADING_RE);
+        if (!m || m[1].length > 3) continue;
+        const level = m[1].length;
+        const text = m[2].split(TICK).join("").split("**").join("").trim();
+        let slug = null;
+        // The same ids addHeadingIds gives the headings in the reading pane (levels 2 and 3).
+        if (level >= 2) {
+          const base = text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "section";
+          slug = base;
+          let n = 2;
+          while (seen.has(slug)) slug = base + "-" + n++;
+          seen.add(slug);
+        }
+        out.push({ level, text, slug });
+      }
+      tocCache[id] = out;
+    }
+    return tocCache[id];
+  }
+
+  // The first PREVIEW_LINES lines. A cut never lands inside a fenced block: the block is taken whole
+  // when it closes after the cut, and dropped when it never closes.
+  function previewCut(body) {
+    const lines = body.split("\\n");
+    if (lines.length <= PREVIEW_LINES) return { text: body, more: 0 };
+    let end = PREVIEW_LINES;
+    let fence = null;
+    let fenceAt = -1;
+    for (let i = 0; i < end; i++) {
+      const t = lines[i].trim();
+      if (fence === null) {
+        if (t.startsWith(TICK) || t.startsWith("~~~")) {
+          fence = t.slice(0, 3);
+          fenceAt = i;
+        }
+      } else if (t.startsWith(fence) && t.split(fence[0]).join("").trim() === "") {
+        fence = null;
+      }
+    }
+    if (fence !== null) {
+      end = fenceAt;
+      for (let i = PREVIEW_LINES; i < lines.length; i++) {
+        const t = lines[i].trim();
+        if (t.startsWith(fence) && t.split(fence[0]).join("").trim() === "") {
+          end = i + 1;
+          break;
+        }
+      }
+    }
+    return { text: lines.slice(0, end).join("\\n"), more: lines.length - end };
+  }
+
+  // A link in the preview must not move the URL hash, which names the open concept.
+  function previewLink(link) {
+    const href = link.getAttribute("href");
+    let target = href.startsWith("/") ? href.slice(1).split("#")[0] : null;
+    if (target && target.endsWith(".md")) target = target.slice(0, -3);
+    if (target && byId[target]) {
+      link.setAttribute("href", "#" + target);
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        openFromSearch(target, null);
+      });
+    } else if (href.startsWith("#")) {
+      link.removeAttribute("href");
+    } else {
+      link.target = "_blank";
+      link.rel = "noopener";
+    }
+  }
+
+  function clearPreview() {
+    previewId = null;
+    $("sm-preview-title").textContent = "";
+    $("sm-open").hidden = true;
+    $("sm-toc").hidden = true;
+    $("sm-toc").replaceChildren();
+    $("sm-text").replaceChildren();
+  }
+
+  function previewConcept(id) {
+    if (previewId === id || !byId[id]) return;
+    previewId = id;
+    $("sm-open").hidden = false;
+    $("sm-preview-title").textContent = byId[id].label;
+    const toc = tocFor(id);
+    $("sm-toc").replaceChildren(...toc.map((heading) => {
+      const link = document.createElement("button");
+      link.type = "button";
+      link.className = "sm-toc-link";
+      link.style.paddingLeft = 6 + (heading.level - 1) * 14 + "px";
+      link.textContent = heading.text;
+      link.addEventListener("click", () => openFromSearch(id, heading.slug));
+      return link;
+    }));
+    $("sm-toc").hidden = toc.length === 0;
+    const cut = previewCut(bundle.bodies[id] || "");
+    const text = $("sm-text");
+    // The same markdown renderer and the same post-processing as the reading pane (renderBody),
+    // minus the widgets, quizzes and diagrams, which stay as the code they are written as.
+    text.innerHTML = marked.parse(cut.text, { gfm: true });
+    const first = text.firstElementChild;
+    if (first && first.tagName === "H1") first.remove();
+    for (const table of text.querySelectorAll("table")) {
+      const wrap = document.createElement("div");
+      wrap.className = "table-wrap";
+      table.replaceWith(wrap);
+      wrap.append(table);
+    }
+    for (const link of text.querySelectorAll("a[href]")) previewLink(link);
+    if (cut.more > 0) {
+      const note = document.createElement("p");
+      note.className = "sm-more";
+      note.textContent = "… truncated, " + cut.more + " more lines";
+      text.append(note);
+    }
+    $("sm-preview").scrollTop = 0;
+  }
+
+  function setActive(index) {
+    const rows = listRows();
+    if (rows.length === 0) {
+      activeResult = -1;
+      return;
+    }
     activeResult = (index + rows.length) % rows.length;
     rows.forEach((row, i) => row.setAttribute("aria-selected", String(i === activeResult)));
-    rows[activeResult].scrollIntoView({ block: "nearest" });
+    const row = rows[activeResult];
+    $("sm-input").setAttribute("aria-activedescendant", row.id);
+    row.scrollIntoView({ block: "nearest" });
+    previewConcept(row.dataset.id);
   }
 
-  function renderResults() {
-    const panel = $("search-results");
-    const query = $("search").value.trim();
-    if (!rankedIds || document.activeElement !== $("search") || !query) { hideResults(); return; }
-    const shown = ranking.slice(0, 8);
-    const head = document.createElement("div");
-    head.className = "sr-head";
-    head.textContent = ranking.length === 0
-      ? "No concepts match"
-      : ranking.length + " match" + (ranking.length === 1 ? "" : "es") + (ranking.length > shown.length ? ", top " + shown.length : "")
-        + " · best first; stale ranks lower";
-    const rows = shown.map((hit) => {
-      const e = hit.entry;
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = "sr-item";
-      row.setAttribute("role", "option");
-      row.setAttribute("aria-selected", "false");
-      row.title = "text " + hit.text.toFixed(2) + hit.adjust.map((a) => " × " + a.factor.toFixed(2) + " (" + a.why + ")").join("");
+  function makeRow(item, i, query) {
+    const e = metaById[item.id];
+    const row = document.createElement("button");
+    row.type = "button";
+    row.id = "sm-opt-" + i;
+    row.className = "sr-item";
+    row.dataset.id = item.id;
+    row.setAttribute("role", "option");
+    row.setAttribute("aria-selected", "false");
+    const title = document.createElement("span");
+    title.className = "sr-title";
+    title.textContent = e.title;
+    const meta = document.createElement("div");
+    meta.className = "sr-meta";
+    const fresh = Rank.freshness(e, searchedAt);
+    meta.append(
+      pill(e.type, "var(--text-muted)"),
+      pill(e.trust, PILL_COLOURS[e.trust]),
+      pill(Rank.freshnessLabel(fresh), PILL_COLOURS[fresh.state]),
+    );
+    if (e.status !== "stable") meta.append(pill(e.status, "#d97706"));
+    row.append(title, meta);
+    // Ranked rows carry the score and the snippet; Contains rows are a plain list of matches.
+    if (item.hit) {
       const score = document.createElement("span");
       score.className = "sr-score";
-      score.textContent = hit.score.toFixed(2);
-      const title = document.createElement("span");
-      title.className = "sr-title";
-      title.textContent = e.title;
-      const meta = document.createElement("div");
-      meta.className = "sr-meta";
-      const fresh = Rank.freshness(e, searchedAt);
-      meta.append(
-        pill(e.type, "var(--text-muted)"),
-        pill(e.trust, PILL_COLOURS[e.trust]),
-        pill(Rank.freshnessLabel(fresh), PILL_COLOURS[fresh.state]),
-      );
-      if (e.status !== "stable") meta.append(pill(e.status, "#d97706"));
-      row.append(score, title, meta);
-      const text = Rank.snippet(bundle.bodies[e.id] || "", query, e.title);
+      score.textContent = item.hit.score.toFixed(2);
+      row.title = "text " + item.hit.text.toFixed(2) + item.hit.adjust.map((a) => " × " + a.factor.toFixed(2) + " (" + a.why + ")").join("");
+      row.prepend(score);
+      const text = Rank.snippet(bundle.bodies[item.id] || "", query, e.title);
       if (text) {
         const line = document.createElement("div");
         line.className = "sr-snippet";
         line.textContent = text;
         row.append(line);
       }
-      row.addEventListener("mousedown", (event) => event.preventDefault());
-      row.addEventListener("click", () => { hideResults(); open(e.id); });
-      return row;
-    });
-    panel.replaceChildren(head, ...rows);
-    panel.hidden = false;
-    $("search").setAttribute("aria-expanded", "true");
-    placeResults();
-    activeResult = -1;
+    }
+    row.addEventListener("mousedown", (event) => event.preventDefault());
+    row.addEventListener("mouseenter", () => setActive(i));
+    row.addEventListener("focus", () => setActive(i));
+    row.addEventListener("click", () => openFromSearch(item.id, null));
+    return row;
+  }
+
+  function renderResults() {
+    if (!searchOpen) return;
+    const query = $("search").value.trim();
+    const ranked = $("search-mode").value === "ranked";
+    let items;
+    let status;
+    if (ranked && !query) {
+      items = [];
+      status = "Type to search";
+    } else if (ranked) {
+      const shown = ranking.slice(0, RESULT_LIMIT);
+      items = shown.map((hit) => ({ id: hit.entry.id, hit }));
+      status = ranking.length === 0
+        ? "No concepts match"
+        : ranking.length + " match" + (ranking.length === 1 ? "" : "es")
+          + (ranking.length > shown.length ? ", top " + shown.length : "") + " · best first; stale ranks lower";
+    } else {
+      items = bundle.nodes.map((node) => node.data).filter((d) => passesFilters(d))
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .map((d) => ({ id: d.id, hit: null }));
+      status = items.length === 0 ? "No concepts match" : items.length + " match" + (items.length === 1 ? "" : "es");
+    }
+    $("sm-list").replaceChildren(...items.map((item, i) => makeRow(item, i, query)));
+    setStatus(status);
+    if (listRows().length > 0) {
+      setActive(0);
+    } else {
+      activeResult = -1;
+      $("sm-input").removeAttribute("aria-activedescendant");
+      clearPreview();
+    }
+  }
+
+  function setStatus(text) {
+    $("sm-status").textContent = text;
   }
 
   function applyFilters() {
@@ -2736,22 +3088,53 @@ const JS = `
     renderResults();
     refreshToolbar();
   }
-  $("search").addEventListener("input", applyFilters);
-  $("search").addEventListener("focus", renderResults);
-  $("search").addEventListener("blur", hideResults);
-  $("search").addEventListener("keydown", (event) => {
-    const open_ = !$("search-results").hidden;
-    if (event.key === "ArrowDown" && open_) { event.preventDefault(); setActiveResult(activeResult + 1); }
-    else if (event.key === "ArrowUp" && open_) { event.preventDefault(); setActiveResult(activeResult - 1); }
-    else if (event.key === "Enter" && open_) {
-      const rows = $("search-results").querySelectorAll(".sr-item");
-      const row = rows[activeResult < 0 ? 0 : activeResult];
-      if (row) { event.preventDefault(); row.click(); }
-    } else if (event.key === "Escape" && open_) { event.preventDefault(); hideResults(); }
+
+  // The top bar's search box is the entry point: focusing it, clicking it or typing in it opens the modal.
+  $("search").addEventListener("focus", () => { if (!suppressOpen) openSearch(); });
+  $("search").addEventListener("pointerdown", () => openSearch());
+  $("search").addEventListener("input", () => {
+    openSearch();
+    applyFilters();
   });
-  window.addEventListener("resize", () => { if (!$("search-results").hidden) placeResults(); });
+  $("sm-input").addEventListener("input", () => {
+    $("search").value = $("sm-input").value;
+    applyFilters();
+  });
+  $("sm-input").addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setActive(activeResult + 1);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setActive(activeResult - 1);
+    } else if (event.key === "Enter") {
+      const row = listRows()[activeResult < 0 ? 0 : activeResult];
+      if (row) {
+        event.preventDefault();
+        openFromSearch(row.dataset.id, null);
+      }
+    }
+  });
+  modal.addEventListener("keydown", onDialogKey);
+  modal.addEventListener("pointerdown", (event) => { backdropDown = event.target === modal; });
+  modal.addEventListener("mousedown", (event) => { if (event.target === modal) event.preventDefault(); });
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal && backdropDown) closeSearch(true);
+    backdropDown = false;
+  });
+  $("sm-close").addEventListener("click", () => closeSearch(true));
+  $("sm-open").addEventListener("click", () => { if (previewId) openFromSearch(previewId, null); });
+  document.addEventListener("focusin", (event) => {
+    if (searchOpen && !modal.contains(event.target)) $("sm-input").focus();
+  });
+  // Back and Forward, or any other route to a concept, closes the modal too.
+  window.addEventListener("hashchange", () => {
+    closeSearch(true);
+    flushSection();
+  });
   $("search-mode").addEventListener("change", () => {
     $("search").placeholder = $("search-mode").value === "ranked" ? "Search concepts" : "Filter by title, path or tag";
+    $("sm-input").placeholder = $("search").placeholder;
     applyFilters();
   });
   $("filter-trust").addEventListener("change", applyFilters);

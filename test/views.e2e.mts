@@ -61,6 +61,21 @@ async function inPanel(p: Page, name: 'filters' | 'display', action: () => Promi
 async function resetIfShown(p: Page) {
   if (await p.isVisible('#reset')) await p.click('#reset');
 }
+// Search is a modal: focusing the top-bar box opens it. Close it with Escape (which keeps the
+// query) before driving the page behind it.
+async function closeSearch(p: Page) {
+  if (await p.isVisible('#search-modal')) await p.keyboard.press('Escape');
+}
+// Sets the query as typing would (the input event opens the modal), then closes it. Filling the box
+// directly would race the focus move into the modal, so the value and the event are set together.
+async function searchFor(p: Page, q: string) {
+  await closeSearch(p);
+  await p.$eval('#search', (el, value) => {
+    (el as HTMLInputElement).value = value;
+    el.dispatchEvent(new Event('input'));
+  }, q);
+  await closeSearch(p);
+}
 
 describe('viewer views', { timeout: 120_000 }, () => {
   let dir = '';
@@ -180,10 +195,10 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.click('[data-view=table]');
     assert.equal(await page.locator('#concept-table tbody tr').count(), 1);
     await inPanel(page, 'filters', () => page.selectOption('#filter-type', ''));
-    await page.fill('#search', 'zzqqxxnomatch');
+    await searchFor(page, 'zzqqxxnomatch');
     assert.equal(await page.locator('#concept-table tbody tr').count(), 0);
     assert.equal(await page.locator('#table-empty').isVisible(), true);
-    await page.fill('#search', '');
+    await searchFor(page, '');
     await page.click('[data-view=graph]');
   });
 
@@ -191,17 +206,199 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await resetIfShown(page);
     await page.focus('#search');
     await page.keyboard.type('retry policy');
-    await page.waitForSelector('#search-results:not([hidden]) .sr-item');
-    const rows = await page.$$eval('#search-results .sr-item', (r) => r.map((x) => x.textContent ?? ''));
+    await page.waitForSelector('#search-modal:not([hidden]) #sm-list .sr-item');
+    const rows = await page.$$eval('#sm-list .sr-item', (r) => r.map((x) => x.textContent ?? ''));
     assert.ok(rows.length >= 2, 'several results');
     assert.match(rows[0]!, /human reviewed|human-reviewed/, 'a human-reviewed concept leads');
     assert.match(rows[0]!, /fresh, \d+d left/);
-    assert.match((await page.textContent('#search-results .sr-head')) ?? '', /best first/);
+    assert.match((await page.textContent('#sm-status')) ?? '', /best first/);
     // Non-matches dim in the graph.
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => location.hash.includes('retry-policy'));
-    assert.equal(await page.isHidden('#search-results'), true, 'the list closes once a result is chosen');
+    assert.equal(await page.isHidden('#search-modal'), true, 'the modal closes once a result is chosen');
     await page.click('#reset');
+  });
+
+  view('focus opens the search modal as a dialog, with focus in its box', async () => {
+    await resetIfShown(page);
+    await page.focus('#search');
+    const dialog = page.locator('.sm-dialog');
+    assert.equal(await dialog.getAttribute('role'), 'dialog');
+    assert.equal(await dialog.getAttribute('aria-modal'), 'true');
+    assert.equal(await page.evaluate('document.activeElement.id'), 'sm-input', 'focus moves into the box');
+    assert.equal(await page.getAttribute('#search', 'aria-haspopup'), 'dialog');
+    assert.equal(await page.getAttribute('#search', 'aria-controls'), 'sm-list');
+    await closeSearch(page);
+    assert.equal(await page.evaluate('document.activeElement.id'), 'search', 'Escape returns focus to the opener');
+  });
+
+  view('the list is left of the preview, and ArrowDown moves the preview to the next result', async () => {
+    await page.focus('#search');
+    await page.keyboard.type('retry policy');
+    await page.waitForSelector('#search-modal:not([hidden]) #sm-list .sr-item:nth-child(2)');
+    const left = (await page.locator('#sm-list').boundingBox())!;
+    const right = (await page.locator('#sm-preview').boundingBox())!;
+    assert.ok(left.x + left.width <= right.x + 1, 'the list box sits left of the preview box');
+    const titleBefore = await page.textContent('#sm-preview-title');
+    await page.keyboard.press('ArrowDown');
+    const titleAfter = await page.textContent('#sm-preview-title');
+    assert.notEqual(titleAfter, titleBefore, 'the preview follows the active result');
+    assert.equal(
+      await page.getAttribute('#sm-input', 'aria-activedescendant'),
+      'sm-opt-1',
+      'the active result is announced to assistive technology',
+    );
+    await closeSearch(page);
+    await page.click('#reset');
+  });
+
+  view('Enter opens the arrow-selected result, changes the hash and closes the modal', async () => {
+    await page.focus('#search');
+    await page.keyboard.type('retry policy');
+    await page.waitForSelector('#search-modal:not([hidden]) #sm-list .sr-item:nth-child(2)');
+    const second = await page.getAttribute('#sm-list .sr-item:nth-child(2)', 'data-id');
+    await page.keyboard.press('ArrowDown');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction((id) => location.hash === '#' + id, second);
+    assert.equal(await page.isHidden('#search-modal'), true);
+    assert.equal(await page.evaluate('document.body.classList.contains("search-open")'), false);
+    assert.equal(await page.evaluate('document.querySelector("main").inert'), false, 'the page is usable again');
+    await page.click('#reset');
+    await hashShown();
+  });
+
+  view('the contents sit above the preview text, and the longest demo concept is truncated', async () => {
+    const longest = await page.evaluate(() => {
+      const bundle = window.BUNDLE as unknown as {
+        bodies: Record<string, string>;
+        nodes: Array<{ data: { id: string; label: string } }>;
+      };
+      let id = '';
+      let lines = 0;
+      for (const [key, body] of Object.entries(bundle.bodies)) {
+        if (body.split('\n').length > lines) {
+          id = key;
+          lines = body.split('\n').length;
+        }
+      }
+      const label = bundle.nodes.find((n) => n.data.id === id)!.data.label;
+      return { id, label, lines };
+    });
+    assert.ok(longest.lines > 50, `the demo has a concept longer than the preview (${longest.lines} lines)`);
+
+    await inPanel(page, 'filters', () => page.selectOption('#search-mode', 'contains'));
+    await page.focus('#search');
+    await page.keyboard.type(longest.label);
+    await page.hover(`#sm-list .sr-item[data-id="${longest.id}"]`);
+    assert.equal(await page.textContent('#sm-preview-title'), longest.label);
+    const toc = (await page.locator('#sm-toc').boundingBox())!;
+    const text = (await page.locator('#sm-text').boundingBox())!;
+    assert.ok(toc.y + toc.height <= text.y + 1, 'the contents are above the text');
+    const note = await page.textContent('#sm-text .sm-more');
+    assert.match(note ?? '', /truncated, \d+ more lines/);
+    assert.equal(await page.isVisible('#sm-open'), true, 'an Open concept button is offered');
+    await searchFor(page, '');
+    await inPanel(page, 'filters', () => page.selectOption('#search-mode', 'ranked'));
+  });
+
+  view('Tab cycles inside the modal, and the page behind it is inert', async () => {
+    await page.focus('#search');
+    const inert = () =>
+      page.evaluate(() => ({
+        topbar: (document.querySelector('.topbar') as HTMLElement & { inert: boolean }).inert,
+        main: (document.querySelector('main') as HTMLElement & { inert: boolean }).inert,
+        statusbar: (document.getElementById('statusbar') as HTMLElement & { inert: boolean }).inert,
+        bodyClass: document.body.classList.contains('search-open'),
+      }));
+    assert.deepEqual(await inert(), { topbar: true, main: true, statusbar: true, bodyClass: true });
+    for (let i = 0; i < 20; i++) {
+      await page.keyboard.press('Tab');
+      const inside = await page.evaluate(() => !!document.activeElement?.closest('.sm-dialog'));
+      assert.equal(inside, true, `Tab ${i + 1} stays in the dialog`);
+    }
+    await closeSearch(page);
+    assert.deepEqual(await inert(), { topbar: false, main: false, statusbar: false, bodyClass: false });
+    await searchFor(page, '');
+  });
+
+  view('Escape closes the modal, returns focus to the search box, and keeps the query', async () => {
+    await page.focus('#search');
+    await page.keyboard.type('retry');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isHidden('#search-modal'), true);
+    assert.equal(await page.evaluate('document.activeElement.id'), 'search');
+    assert.equal(await page.inputValue('#search'), 'retry', 'the query stays');
+    assert.equal(await page.isVisible('#search-modal'), false, 'focus returning to the box does not reopen it');
+    await searchFor(page, '');
+  });
+
+  view('Contains mode lists the matches without scores or snippets', async () => {
+    await inPanel(page, 'filters', () => page.selectOption('#search-mode', 'contains'));
+    await page.focus('#search');
+    await page.keyboard.type('retry');
+    await page.waitForSelector('#search-modal:not([hidden]) #sm-list .sr-item');
+    assert.match((await page.textContent('#sm-status')) ?? '', /^\d+ match(es)?$/);
+    assert.equal(await page.locator('#sm-list .sr-score').count(), 0, 'no score');
+    assert.equal(await page.locator('#sm-list .sr-snippet').count(), 0, 'no snippet');
+    await closeSearch(page);
+    await inPanel(page, 'filters', () => page.selectOption('#search-mode', 'ranked'));
+    await searchFor(page, '');
+  });
+
+  view('a contents link opens its concept and closes the modal', async () => {
+    await page.focus('#search');
+    await page.keyboard.type('retry policy');
+    await page.waitForSelector('#search-modal:not([hidden]) #sm-list .sr-item');
+    const tocLinks = page.locator('#sm-toc .sm-toc-link');
+    assert.ok((await tocLinks.count()) > 0, 'the first result has contents');
+    const id = await page.getAttribute('#sm-list .sr-item[aria-selected=true]', 'data-id');
+    await tocLinks.last().click();
+    await page.waitForFunction((want) => location.hash === '#' + want, id);
+    assert.equal(await page.isHidden('#search-modal'), true);
+    await hashShown();
+    await page.click('#reset');
+  });
+
+  view('on a phone the modal fills the window, with the results above the preview', async () => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      await page.focus('#search');
+      await page.keyboard.type('retry policy');
+      await page.waitForSelector('#search-modal:not([hidden]) #sm-list .sr-item');
+      const m = await page.evaluate(() => {
+        const box = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
+        const dialog = box('.sm-dialog');
+        return {
+          dialog: [dialog.x, dialog.y, dialog.width, dialog.height],
+          listAbovePreview: box('#sm-list').bottom <= box('#sm-preview').top + 1,
+          pageWidth: document.documentElement.scrollWidth,
+        };
+      });
+      assert.deepEqual(m.dialog, [0, 0, 390, 844], 'the dialog covers the viewport');
+      assert.equal(m.listAbovePreview, true, 'the list is above the preview');
+      assert.equal(m.pageWidth, 390, 'no sideways scroll');
+      await closeSearch(page);
+      await page.click('#reset');
+    } finally {
+      await page.setViewportSize({ width: 1400, height: 800 });
+    }
+  });
+
+  view('the search modal is readable in the dark theme', async () => {
+    const theme = () => page.evaluate(() => document.documentElement.dataset.theme);
+    const start = await theme();
+    if (start !== 'dark') await page.click('#theme-toggle');
+    try {
+      await page.focus('#search');
+      const colours = await page.evaluate(() => ({
+        dialog: getComputedStyle(document.querySelector('.sm-dialog')!).backgroundColor,
+        body: getComputedStyle(document.body).backgroundColor,
+      }));
+      assert.notEqual(colours.dialog, colours.body, 'the dialog is not the page colour');
+      await closeSearch(page);
+    } finally {
+      if (start !== 'dark') await page.click('#theme-toggle');
+    }
   });
 
   view('the search mode, trust and freshness controls change what matches', async () => {
@@ -209,7 +406,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
     const rowCount = () => page.locator('#concept-table tbody tr').count();
     const all = await rowCount();
     // Ranked: the table follows the ranking and shows a Match column.
-    await page.fill('#search', 'retries');
+    await searchFor(page, 'retries');
     const ranked = await rowCount();
     assert.ok(ranked > 0 && ranked < all);
     assert.equal(await page.locator('#concept-table th:last-child').isVisible(), true);
@@ -223,7 +420,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
     const human = await rowCount();
     assert.ok(human > 0 && human < ranked, `human-reviewed ${human} of ${ranked}`);
     await inPanel(page, 'filters', () => page.selectOption('#filter-trust', ''));
-    await page.fill('#search', '');
+    await searchFor(page, '');
     await inPanel(page, 'filters', () => page.selectOption('#filter-fresh', 'stale'));
     assert.equal(await rowCount(), 1, 'the demo has one stale concept');
     await page.click('#reset');
@@ -276,9 +473,9 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await closePanels(page);
 
     // A search query counts as something for Reset to clear.
-    await page.fill('#search', 'retry');
+    await searchFor(page, 'retry');
     assert.equal(await page.isVisible('#reset'), true, 'a search query shows Reset');
-    await page.fill('#search', '');
+    await searchFor(page, '');
     assert.equal(await page.isHidden('#reset'), true);
     await page.click('[data-view=graph]');
   });
@@ -360,8 +557,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
     const before: string[] = await page.evaluate('window.__OKF_VIEW__.visibleIds()');
     assert.ok(before.length < ids.length);
 
-    await page.fill('#search', 'zzzz');
-    await page.keyboard.press('Escape'); // close the results list, which can sit over Reset
+    await searchFor(page, 'zzzz');
     await page.click('#reset');
     assert.equal(await page.inputValue('#search'), '');
     assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'true');
@@ -560,8 +756,8 @@ describe('viewer views', { timeout: 120_000 }, () => {
       await memory.waitForFunction('window.__OKF_VIEW__ && window.marked && window.cytoscape', undefined, { timeout: 20_000 });
       await memory.focus('#search');
       await memory.keyboard.type('week.ts');
-      await memory.waitForSelector('#search-results:not([hidden]) .sr-item');
-      const first = (await memory.textContent('#search-results .sr-item')) ?? '';
+      await memory.waitForSelector('#search-modal:not([hidden]) #sm-list .sr-item');
+      const first = (await memory.textContent('#sm-list .sr-item')) ?? '';
       assert.ok(first.includes(expected.title), `${first} should lead with ${expected.title}`);
       assert.deepEqual(errors, [], 'page errors');
     } finally {

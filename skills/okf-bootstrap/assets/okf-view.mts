@@ -859,6 +859,7 @@ ${CSS}
       <p id="table-empty" hidden>No concepts match the filters.</p>
     </div>
   </section>
+  <div id="divider" role="separator" aria-orientation="vertical" aria-label="Resize graph and reading panes" aria-controls="graph-pane" aria-valuemin="20" aria-valuemax="70" aria-valuenow="40" tabindex="0"></div>
   <section id="detail">
     <p id="detail-empty">Select a concept in the graph.</p>
     <article id="detail-content" hidden>
@@ -1081,7 +1082,7 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 main { flex: 1; min-height: 0; display: flex; }
 #graph-pane {
   position: relative;
-  flex: 0 0 40%;
+  flex: 0 0 calc(var(--split, 40) * 1%);
   min-width: 0;
   background: var(--surface);
   border-right: 1px solid var(--border);
@@ -1107,6 +1108,39 @@ main { flex: 1; min-height: 0; display: flex; }
 #detail-content, #detail-empty { max-width: 46rem; margin: 0 auto; padding: 36px 36px 72px; }
 #detail-empty { color: var(--text-muted); text-align: center; }
 body.reading #graph-pane { display: none; }
+
+/* A: divider */
+/* The divider is a 1px line with a 9px hit area; its negative margins keep the layout at 1px. */
+body:not(.reading) #graph-pane { border-right: 0; }
+#divider {
+  position: relative;
+  flex: 0 0 9px;
+  margin: 0 -4px;
+  z-index: 1;
+  cursor: col-resize;
+  touch-action: none;
+}
+#divider::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 4px;
+  width: 1px;
+  background: var(--border);
+}
+#divider:hover::before, #divider:focus-visible::before, body.dragging-split #divider::before {
+  left: 3px;
+  width: 3px;
+  background: var(--accent);
+}
+#divider:focus-visible { outline: none; }
+body.dragging-split { cursor: col-resize; user-select: none; }
+body.dragging-split #graph { pointer-events: none; }
+body.reading #divider, body[data-view="table"]:not(.reading) #divider { display: none; }
+@media (max-width: 820px) {
+  #divider { display: none; }
+}
 
 /* View switcher */
 .segmented { display: inline-flex; }
@@ -2837,6 +2871,93 @@ const JS = `
     const button = event.target.closest("button[data-view]");
     if (button) setView(button.dataset.view);
   });
+
+  // --- A: divider ---------------------------------------------------------------
+  // Resizes the graph pane against the reading pane. The width is a percentage of <main>, held in
+  // --split (read by #graph-pane's flex-basis) and kept for the session in sessionStorage.
+  const SPLIT_KEY = "okf-split";
+  const SPLIT_DEFAULT = 40;
+  const SPLIT_MIN = 20;
+  const SPLIT_MAX = 70;
+  const splitDivider = $("divider");
+  let storedSplit = null; // the fallback when sessionStorage is unavailable (blocked, private, throwing)
+  function clampSplit(value) {
+    return Math.min(SPLIT_MAX, Math.max(SPLIT_MIN, Math.round(value)));
+  }
+  function loadSplit() {
+    let raw = storedSplit;
+    try { raw = sessionStorage.getItem(SPLIT_KEY) ?? raw; } catch {}
+    if (raw === null || String(raw).trim() === "") return SPLIT_DEFAULT;
+    const value = Number(raw);
+    return Number.isFinite(value) ? clampSplit(value) : SPLIT_DEFAULT;
+  }
+  function storeSplit() {
+    storedSplit = String(paneSplit);
+    try { sessionStorage.setItem(SPLIT_KEY, String(paneSplit)); } catch {}
+  }
+  function applySplit(value) {
+    paneSplit = clampSplit(value);
+    document.documentElement.style.setProperty("--split", String(paneSplit));
+    splitDivider.setAttribute("aria-valuenow", String(paneSplit));
+  }
+  // Restored before the first fit: the graph was laid out at the default width, so resize it now.
+  let paneSplit = SPLIT_DEFAULT;
+  applySplit(loadSplit());
+  cy.resize();
+
+  // Once a drag or key press settles: the graph takes the new size, and refits when it is on screen.
+  function finishSplit() {
+    cy.resize();
+    if (view === "graph") cy.fit(undefined, 40);
+  }
+
+  let splitPointer = null; // the pointer id while a drag is under way
+  let splitFrame = 0;
+  splitDivider.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    splitPointer = event.pointerId;
+    splitDivider.setPointerCapture(event.pointerId);
+    document.body.classList.add("dragging-split");
+    event.preventDefault();
+  });
+  splitDivider.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== splitPointer) return;
+    const main = splitDivider.parentElement.getBoundingClientRect();
+    applySplit(((event.clientX - main.left) / main.width) * 100);
+    if (splitFrame) return;
+    splitFrame = requestAnimationFrame(() => {
+      splitFrame = 0;
+      if (view === "graph") cy.resize();
+    });
+  });
+  function endSplitDrag(event) {
+    if (event.pointerId !== splitPointer) return;
+    splitPointer = null;
+    document.body.classList.remove("dragging-split");
+    storeSplit();
+    finishSplit();
+  }
+  splitDivider.addEventListener("pointerup", endSplitDrag);
+  splitDivider.addEventListener("pointercancel", endSplitDrag);
+  splitDivider.addEventListener("dblclick", () => {
+    applySplit(SPLIT_DEFAULT);
+    storeSplit();
+    finishSplit();
+  });
+  splitDivider.addEventListener("keydown", (event) => {
+    const step = event.shiftKey ? 10 : 2;
+    let next = null;
+    if (event.key === "ArrowLeft") next = paneSplit - step;
+    else if (event.key === "ArrowRight") next = paneSplit + step;
+    else if (event.key === "Home") next = SPLIT_MIN;
+    else if (event.key === "End") next = SPLIT_MAX;
+    if (next === null) return;
+    event.preventDefault();
+    applySplit(next);
+    storeSplit();
+    finishSplit();
+  });
+  // --- end A: divider ---
 
   // A row or tree entry behaves like a graph node: open the concept, keeping the URL hash in sync.
   function open(id) {

@@ -610,4 +610,157 @@ describe('viewer views', { timeout: 120_000 }, () => {
       await page.setViewportSize({ width: 1400, height: 800 });
     }
   });
+
+  // A: divider. The graph and reading panes are split by a draggable divider. These tests drive it
+  // with the mouse and keyboard, and check the width holds across a reload and a view switch.
+  const splitValue = (p: Page) => p.getAttribute('#divider', 'aria-valuenow').then(Number);
+  const paneWidth = (p: Page) => p.locator('#graph-pane').evaluate((el) => el.getBoundingClientRect().width);
+  const resetSplit = async (p: Page) => {
+    await p.locator('#divider').dblclick();
+  };
+  // A fresh viewer page, optionally with a script run before the viewer (to break storage).
+  async function openViewer(init?: () => void): Promise<Page> {
+    const p = await browser!.newPage({ viewport: { width: 1400, height: 800 } });
+    if (init) await p.addInitScript(init);
+    await p.route(/^https:/, (route) => {
+      const body = localLib(route.request().url());
+      if (body) return route.fulfill({ contentType: 'text/javascript', body });
+      return route.continue();
+    });
+    await p.goto('file://' + path.join(dir, 'viz.html'));
+    await p.waitForFunction('window.__OKF_VIEW__ && window.marked && window.cytoscape', undefined, { timeout: 20_000 });
+    return p;
+  }
+
+  view('A: dragging the divider widens the graph pane and updates aria-valuenow', async () => {
+    await page.click('[data-view=graph]');
+    await resetSplit(page);
+    assert.equal(await splitValue(page), 40);
+    const before = await paneWidth(page);
+    const box = (await page.locator('#divider').boundingBox())!;
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x + 150, y, { steps: 6 });
+    await page.mouse.move(x + 300, y, { steps: 6 });
+    await page.mouse.up();
+    const grown = (await paneWidth(page)) - before;
+    // The width is stored as a whole percent of <main>, so a 1400px window moves in 14px steps.
+    assert.ok(Math.abs(grown - 300) <= 8, `the pane grew by ${grown}px`);
+    assert.ok((await splitValue(page)) > 40, 'aria-valuenow follows the drag');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('dragging-split')), false);
+    await resetSplit(page);
+  });
+
+  view('A: the width persists across a reload for the session', async () => {
+    await page.click('[data-view=graph]');
+    await page.focus('#divider');
+    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
+    assert.equal(await splitValue(page), 50);
+    await page.reload();
+    await page.waitForFunction('window.__OKF_VIEW__ && window.marked && window.cytoscape', undefined, { timeout: 20_000 });
+    assert.equal(await splitValue(page), 50, 'restored from sessionStorage');
+    assert.equal(await page.evaluate(() => document.documentElement.style.getPropertyValue('--split')), '50');
+    await resetSplit(page);
+  });
+
+  view('A: the arrow keys move the divider in steps, and Home and End go to the limits', async () => {
+    await page.click('[data-view=graph]');
+    await resetSplit(page);
+    await page.focus('#divider');
+    for (let i = 0; i < 3; i++) await page.keyboard.press('ArrowRight');
+    assert.equal(await splitValue(page), 46);
+    await page.keyboard.press('Shift+ArrowLeft');
+    assert.equal(await splitValue(page), 36, 'Shift moves by 10');
+    await page.keyboard.press('Home');
+    assert.equal(await splitValue(page), 20);
+    await page.keyboard.press('End');
+    assert.equal(await splitValue(page), 70);
+    await resetSplit(page);
+  });
+
+  view('A: the divider is hidden in reading mode, the table view and on a phone', async () => {
+    const shown = () => page.isVisible('#divider');
+    await page.click('[data-view=graph]');
+    assert.equal(await shown(), true, 'shown in the graph view');
+    await page.click('[data-view=table]');
+    assert.equal(await shown(), false, 'hidden in the table view');
+    await page.click('[data-view=graph]');
+    await page.click('#reading-toggle');
+    try {
+      assert.equal(await page.evaluate(() => document.body.classList.contains('reading')), true);
+      assert.equal(await shown(), false, 'hidden in reading mode');
+    } finally {
+      await page.click('#reading-toggle');
+    }
+    await page.setViewportSize({ width: 390, height: 844 });
+    try {
+      assert.equal(await shown(), false, 'hidden on a phone');
+    } finally {
+      await page.setViewportSize({ width: 1400, height: 800 });
+    }
+  });
+
+  view('A: after a drag the graph canvas fills the pane, also after a trip through the tree', async () => {
+    await page.click('[data-view=graph]');
+    await page.focus('#divider');
+    for (let i = 0; i < 5; i++) await page.keyboard.press('ArrowRight');
+    await page.click('[data-view=tree]');
+    await page.click('[data-view=graph]');
+    const sizes = await page.evaluate(() => {
+      const graph = document.getElementById('graph')!.getBoundingClientRect();
+      const canvases = [...document.querySelectorAll('#graph canvas')].map((c) => {
+        const r = c.getBoundingClientRect();
+        return { width: r.width, height: r.height };
+      });
+      return { width: graph.width, height: graph.height, canvases };
+    });
+    assert.ok(sizes.canvases.length > 0, 'the graph has canvases');
+    for (const c of sizes.canvases) {
+      assert.ok(Math.abs(c.width - sizes.width) <= 2 && Math.abs(c.height - sizes.height) <= 2, JSON.stringify(sizes));
+    }
+    await resetSplit(page);
+  });
+
+  view('A: with sessionStorage throwing the page loads without errors and the divider still drags', async () => {
+    const p = await openViewer(() => {
+      Object.defineProperty(window, 'sessionStorage', {
+        configurable: true,
+        get() {
+          throw new DOMException('storage blocked', 'SecurityError');
+        },
+      });
+    });
+    const errors: string[] = [];
+    p.on('pageerror', (e) => errors.push(e.message));
+    try {
+      assert.equal(
+        await p.evaluate(() => {
+          try {
+            void sessionStorage;
+            return false;
+          } catch {
+            return true;
+          }
+        }),
+        true,
+        'sessionStorage throws in this page',
+      );
+      await p.click('[data-view=graph]');
+      const before = await paneWidth(p);
+      const box = (await p.locator('#divider').boundingBox())!;
+      const x = box.x + box.width / 2;
+      const y = box.y + box.height / 2;
+      await p.mouse.move(x, y);
+      await p.mouse.down();
+      await p.mouse.move(x + 300, y, { steps: 8 });
+      await p.mouse.up();
+      assert.ok((await paneWidth(p)) - before > 250, 'the drag still resizes the pane');
+      assert.ok((await splitValue(p)) > 40, 'aria-valuenow follows the drag');
+      assert.deepEqual(errors, [], 'page errors');
+    } finally {
+      await p.close();
+    }
+  });
 });

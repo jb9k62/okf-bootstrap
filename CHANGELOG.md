@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Resizable panes**: drag the divider between the graph and the reading pane, or focus it and use the arrow keys; the width is kept for the session.
+
 ## 0.6.0 - 2026-10-08
 
 - **`npm run okf:update`**: brings a project's generated tools (`scripts/okf-*`) up to a release.

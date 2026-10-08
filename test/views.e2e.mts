@@ -44,6 +44,24 @@ function localLib(url: string): string | null {
   }
 }
 
+// The Filters and Display controls sit in popovers, closed until a reader opens them. Open the
+// panel that holds a control before driving it, and close it again afterwards with Escape.
+async function openPanel(p: Page, name: 'filters' | 'display') {
+  if (!(await p.isVisible(`#${name}-panel`))) await p.click(`#${name}-toggle`);
+}
+async function closePanels(p: Page) {
+  if ((await p.locator('.popover:not([hidden])').count()) > 0) await p.keyboard.press('Escape');
+}
+async function inPanel(p: Page, name: 'filters' | 'display', action: () => Promise<unknown>) {
+  await openPanel(p, name);
+  await action();
+  await closePanels(p);
+}
+// Reset is hidden while nothing is set, so only click it when it is showing.
+async function resetIfShown(p: Page) {
+  if (await p.isVisible('#reset')) await p.click('#reset');
+}
+
 describe('viewer views', { timeout: 120_000 }, () => {
   let dir = '';
   let browser: Browser | undefined;
@@ -112,11 +130,13 @@ describe('viewer views', { timeout: 120_000 }, () => {
   view('every layout in the dropdown runs without error', async () => {
     const layouts = await page.$$eval('#layout option', (o) => o.map((x) => (x as HTMLOptionElement).value));
     assert.deepEqual(layouts, ['cose', 'concentric', 'breadthfirst', 'circle', 'grid']);
-    for (const layout of layouts) {
-      await page.selectOption('#layout', layout);
-      await page.waitForTimeout(100);
-    }
-    await page.selectOption('#layout', 'cose');
+    await inPanel(page, 'display', async () => {
+      for (const layout of layouts) {
+        await page.selectOption('#layout', layout);
+        await page.waitForTimeout(100);
+      }
+      await page.selectOption('#layout', 'cose');
+    });
   });
 
   view('the switcher shows one view at a time and hides graph-only controls', async () => {
@@ -125,7 +145,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
         view: document.body.dataset.view,
         tree: !document.getElementById('tree')!.hidden,
         table: !document.getElementById('table-wrap')!.hidden,
-        layout: getComputedStyle(document.getElementById('layout')!).display !== 'none',
+        layout: getComputedStyle(document.getElementById('layout')!.closest('.graph-only')!).display !== 'none',
       }));
     assert.deepEqual(await state(), { view: 'graph', tree: false, table: false, layout: true });
     await page.click('[data-view=tree]');
@@ -155,11 +175,11 @@ describe('viewer views', { timeout: 120_000 }, () => {
 
   view('search and the type filter narrow the tree and the table together', async () => {
     await page.click('[data-view=tree]');
-    await page.selectOption('#filter-type', 'Metric');
+    await inPanel(page, 'filters', () => page.selectOption('#filter-type', 'Metric'));
     assert.equal(await page.locator('#tree .tree-item:not([hidden])').count(), 1);
     await page.click('[data-view=table]');
     assert.equal(await page.locator('#concept-table tbody tr').count(), 1);
-    await page.selectOption('#filter-type', '');
+    await inPanel(page, 'filters', () => page.selectOption('#filter-type', ''));
     await page.fill('#search', 'zzqqxxnomatch');
     assert.equal(await page.locator('#concept-table tbody tr').count(), 0);
     assert.equal(await page.locator('#table-empty').isVisible(), true);
@@ -168,7 +188,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
   });
 
   view('ranked search lists results with trust and freshness, and Enter opens the first', async () => {
-    await page.click('#reset');
+    await resetIfShown(page);
     await page.focus('#search');
     await page.keyboard.type('retry policy');
     await page.waitForSelector('#search-results:not([hidden]) .sr-item');
@@ -194,20 +214,72 @@ describe('viewer views', { timeout: 120_000 }, () => {
     assert.ok(ranked > 0 && ranked < all);
     assert.equal(await page.locator('#concept-table th:last-child').isVisible(), true);
     // Contains: a plain match on title, path or tag, with no Match column.
-    await page.selectOption('#search-mode', 'contains');
+    await inPanel(page, 'filters', () => page.selectOption('#search-mode', 'contains'));
     assert.equal(await page.locator('#concept-table th:last-child').isHidden(), true);
     assert.ok((await rowCount()) > 0);
-    await page.selectOption('#search-mode', 'ranked');
+    await inPanel(page, 'filters', () => page.selectOption('#search-mode', 'ranked'));
     // Trust and freshness narrow ranked results.
-    await page.selectOption('#filter-trust', 'human-reviewed');
+    await inPanel(page, 'filters', () => page.selectOption('#filter-trust', 'human-reviewed'));
     const human = await rowCount();
     assert.ok(human > 0 && human < ranked, `human-reviewed ${human} of ${ranked}`);
-    await page.selectOption('#filter-trust', '');
+    await inPanel(page, 'filters', () => page.selectOption('#filter-trust', ''));
     await page.fill('#search', '');
-    await page.selectOption('#filter-fresh', 'stale');
+    await inPanel(page, 'filters', () => page.selectOption('#filter-fresh', 'stale'));
     assert.equal(await rowCount(), 1, 'the demo has one stale concept');
     await page.click('#reset');
     assert.equal(await rowCount(), all);
+    await page.click('[data-view=graph]');
+  });
+
+  view('the Filters badge, chips and Reset follow the active filters, and the popovers close', async () => {
+    await resetIfShown(page);
+    assert.equal(await page.isHidden('#reset'), true, 'Reset has nothing to clear');
+    assert.equal(await page.isHidden('#filters-count'), true, 'no badge with no filter set');
+    assert.equal(await page.isHidden('#filter-chips'), true, 'no chips with no filter set');
+    assert.equal(await page.isHidden('#filters-panel'), true, 'the Filters panel starts closed');
+    assert.equal(await page.isHidden('#display-panel'), true, 'the Display panel starts closed');
+
+    await openPanel(page, 'filters');
+    await page.selectOption('#filter-trust', 'human-reviewed');
+    assert.equal(await page.textContent('#filters-count'), '1');
+    await page.selectOption('#filter-fresh', 'stale');
+    assert.equal(await page.textContent('#filters-count'), '2');
+    assert.equal(await page.locator('#filter-chips .filter-chip').count(), 2);
+    assert.equal(await page.isVisible('#reset'), true, 'Reset appears once a filter is set');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isVisible('#filters-panel'), false, 'Escape closes the panel');
+    assert.equal(await page.getAttribute('#filters-toggle', 'aria-expanded'), 'false');
+    assert.equal(await page.isVisible('#filter-chips'), true, 'the chips stay in the bar');
+
+    // A chip removes its own filter and nothing else.
+    await page.click('#filter-chips .filter-chip:has-text("Freshness")');
+    assert.equal(await page.inputValue('#filter-fresh'), '');
+    assert.equal(await page.inputValue('#filter-trust'), 'human-reviewed');
+    assert.equal(await page.textContent('#filters-count'), '1');
+    assert.equal(await page.locator('#filter-chips .filter-chip').count(), 1);
+
+    // One popover at a time, and a click outside the open one closes it.
+    await page.click('#filters-toggle');
+    await page.click('#display-toggle');
+    assert.equal(await page.isVisible('#display-panel'), true);
+    assert.equal(await page.isVisible('#filters-panel'), false, 'opening Display closes Filters');
+    await page.click('#detail');
+    assert.equal(await page.isVisible('#display-panel'), false, 'an outside click closes it');
+    assert.equal(await page.getAttribute('#display-toggle', 'aria-expanded'), 'false');
+
+    // Clear filters empties the rest, and Reset hides again.
+    await openPanel(page, 'filters');
+    await page.click('#clear-filters');
+    assert.equal(await page.isHidden('#filters-count'), true);
+    assert.equal(await page.isHidden('#filter-chips'), true);
+    assert.equal(await page.isHidden('#reset'), true, 'Reset hides with nothing set');
+    await closePanels(page);
+
+    // A search query counts as something for Reset to clear.
+    await page.fill('#search', 'retry');
+    assert.equal(await page.isVisible('#reset'), true, 'a search query shows Reset');
+    await page.fill('#search', '');
+    assert.equal(await page.isHidden('#reset'), true);
     await page.click('[data-view=graph]');
   });
 
@@ -259,7 +331,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.evaluate((id) => window.__OKF_VIEW__.show(id), focus);
     assert.equal((await page.evaluate('window.__OKF_VIEW__.visibleIds()') as string[]).length, ids.length);
 
-    await page.click('#hood-toggle');
+    await inPanel(page, 'display', () => page.click('#hood-toggle'));
     assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'true');
     assert.equal(await page.isDisabled('#layout'), true);
     const shown: string[] = await page.evaluate('window.__OKF_VIEW__.visibleIds()');
@@ -276,7 +348,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
     await page.evaluate((id) => window.__OKF_VIEW__.show(id), next);
     assert.ok((await page.evaluate('window.__OKF_VIEW__.visibleIds()') as string[]).includes(next));
 
-    await page.click('#hood-toggle');
+    await inPanel(page, 'display', () => page.click('#hood-toggle'));
     assert.equal(await page.isDisabled('#layout'), false);
     assert.equal((await page.evaluate('window.__OKF_VIEW__.visibleIds()') as string[]).length, ids.length);
   });
@@ -284,7 +356,7 @@ describe('viewer views', { timeout: 120_000 }, () => {
   view('reset in neighbourhood mode clears filters and keeps the neighbourhood in view', async () => {
     const ids: string[] = await page.evaluate('window.__OKF_VIEW__.ids');
     await page.evaluate((id) => window.__OKF_VIEW__.show(id), ids[0]!);
-    await page.click('#hood-toggle');
+    await inPanel(page, 'display', () => page.click('#hood-toggle'));
     const before: string[] = await page.evaluate('window.__OKF_VIEW__.visibleIds()');
     assert.ok(before.length < ids.length);
 
@@ -296,26 +368,26 @@ describe('viewer views', { timeout: 120_000 }, () => {
     assert.deepEqual(new Set(await page.evaluate('window.__OKF_VIEW__.visibleIds()') as string[]), new Set(before));
     assert.equal(await page.evaluate('window.__OKF_VIEW__.inView()'), true);
 
-    await page.click('#hood-toggle');
+    await inPanel(page, 'display', () => page.click('#hood-toggle'));
   });
 
   view('colour modes recolour the key and the tree dots', async () => {
     const key = () => page.$$eval('#legend li', (items) => items.map((i) => i.textContent?.trim() ?? ''));
     const typeKey = await key();
     assert.ok(typeKey.includes('Application'));
-    await page.selectOption('#color-by', 'trust');
+    await inPanel(page, 'display', () => page.selectOption('#color-by', 'trust'));
     assert.deepEqual(await key(), ['Human reviewed', 'Machine confirmed', 'Unverified']);
-    await page.selectOption('#color-by', 'freshness');
+    await inPanel(page, 'display', () => page.selectOption('#color-by', 'freshness'));
     assert.deepEqual(await key(), ['Fresh', 'Stale within 30 days', 'Stale', 'No expiry set']);
 
     await page.click('[data-view=tree]');
     const dots = await page.$$eval('#tree .tree-item .dot', (d) => d.map((x) => (x as HTMLElement).title));
     // The demo mixes all three freshness states, so the tooltips must not be uniform.
     assert.ok(new Set(dots).size >= 3, 'dots carry the freshness of their concept: ' + [...new Set(dots)]);
-    await page.selectOption('#color-by', 'trust');
+    await inPanel(page, 'display', () => page.selectOption('#color-by', 'trust'));
     const trust = await page.$$eval('#tree .tree-item .dot', (d) => d.map((x) => (x as HTMLElement).title));
     assert.ok(trust.includes('Human reviewed') && trust.includes('Machine confirmed') && trust.includes('Unverified'));
-    await page.selectOption('#color-by', 'type');
+    await inPanel(page, 'display', () => page.selectOption('#color-by', 'type'));
     await page.click('[data-view=graph]');
   });
 
@@ -446,13 +518,13 @@ describe('viewer views', { timeout: 120_000 }, () => {
 
     // Neighbourhood survives a trip through reading view.
     await page.click('#view-switch [data-view=graph]');
-    await page.click('#hood-toggle');
+    await inPanel(page, 'display', () => page.click('#hood-toggle'));
     const shown: string[] = await page.evaluate('window.__OKF_VIEW__.visibleIds()');
     await page.click('#reading-toggle');
     await page.click('#reading-toggle');
     assert.deepEqual(new Set(await page.evaluate('window.__OKF_VIEW__.visibleIds()') as string[]), new Set(shown));
     assert.equal(await page.evaluate('window.__OKF_VIEW__.inView()'), true);
-    await page.click('#hood-toggle');
+    await inPanel(page, 'display', () => page.click('#hood-toggle'));
   });
 
   view('reading view and the theme toggle work from every view', async () => {
@@ -497,29 +569,43 @@ describe('viewer views', { timeout: 120_000 }, () => {
     }
   });
 
-  view('on a phone the top bar stays compact and the page does not scroll sideways', async () => {
+  view('on a phone the top bar stays compact, its controls wrap, and a panel is a full-width sheet', async () => {
     await page.setViewportSize({ width: 390, height: 844 });
     try {
       const m = await page.evaluate(() => {
         const box = (sel: string) => document.querySelector(sel)!.getBoundingClientRect();
-        const chips = document.querySelector('.chips') as HTMLElement;
+        const bar = document.querySelector('.topbar') as HTMLElement;
+        const controls = ['#view-switch', '#filters-toggle', '#display-toggle', '#reading-toggle', '#theme-toggle'];
         return {
           scrollWidth: document.documentElement.scrollWidth,
+          barScrollWidth: bar.scrollWidth,
+          barWidth: bar.clientWidth,
           topbar: box('.topbar').height,
           searchWidth: box('#search').width,
-          searchAboveChips: box('#search').bottom <= box('.chips').top,
-          chipsScroll: chips.scrollWidth > chips.clientWidth,
+          searchAboveControls: box('#search').bottom <= box('#view-switch').top,
+          controlsInside: controls.every((sel) => box(sel).right <= innerWidth && box(sel).left >= 0),
           legendInPane: box('#legend').right <= box('#graph-pane').right,
           detail: box('#detail').height,
         };
       });
       assert.equal(m.scrollWidth, 390, 'page width equals the viewport');
+      assert.ok(m.barScrollWidth <= m.barWidth, 'the top bar does not scroll sideways');
       assert.ok(m.topbar < 844 * 0.25, `top bar is ${m.topbar}px tall`);
       assert.ok(m.searchWidth > 390 - 40, 'search fills the row');
-      assert.equal(m.searchAboveChips, true);
-      assert.equal(m.chipsScroll, true, 'the controls row scrolls instead of wrapping');
+      assert.equal(m.searchAboveControls, true);
+      assert.equal(m.controlsInside, true, 'every control is on screen');
       assert.equal(m.legendInPane, true);
       assert.ok(m.detail > 844 * 0.4, `reading pane is ${m.detail}px tall`);
+
+      await page.click('#filters-toggle');
+      const sheet = await page.evaluate(() => {
+        const panel = document.querySelector('#filters-panel')!.getBoundingClientRect();
+        const bar = document.querySelector('.topbar')!.getBoundingClientRect();
+        return { left: panel.left, right: panel.right, top: panel.top, barBottom: bar.bottom };
+      });
+      assert.ok(sheet.left <= 1 && sheet.right >= 389, `the sheet spans the width: ${JSON.stringify(sheet)}`);
+      assert.ok(Math.abs(sheet.top - sheet.barBottom) <= 2, 'the sheet sits under the bar');
+      await closePanels(page);
     } finally {
       await page.setViewportSize({ width: 1400, height: 800 });
     }

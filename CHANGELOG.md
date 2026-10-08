@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Viewer top bar decluttered**: search, the Graph/Tree/Table switch, Filters, Display, Reading and
+  the theme stay visible. Search mode, type, trust and freshness move into a Filters panel with a
+  count and removable chips; colour, layout and Neighbourhood move into a Display panel. Reset
+  appears only while a search or filter is set.
+
 ## 0.5.0 - 2026-10-08
 
 Search and the memory tools: more accurate, harder to stall, and faster to start.

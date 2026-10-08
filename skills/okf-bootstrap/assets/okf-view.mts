@@ -780,46 +780,68 @@ ${CSS}
   </div>
   <div class="controls">
     <input id="search" type="search" placeholder="Search concepts" aria-label="Search concepts" role="combobox" aria-expanded="false" aria-controls="search-results" autocomplete="off">
-    <div class="chips">
-    <select id="search-mode" aria-label="Search mode" title="Ranked: relevance, with stale and unverified concepts ranked lower. Contains: a plain match on title, path or tag.">
-      <option value="ranked">Search: ranked</option>
-      <option value="contains">Search: contains</option>
-    </select>
-    <select id="filter-type" aria-label="Filter by type"><option value="">All types</option></select>
-    <select id="filter-trust" aria-label="Filter by trust">
-      <option value="">Any trust</option>
-      <option value="human-reviewed">Human reviewed</option>
-      <option value="machine-confirmed">Machine confirmed</option>
-      <option value="unverified">Unverified</option>
-    </select>
-    <select id="filter-fresh" aria-label="Filter by freshness">
-      <option value="">Any freshness</option>
-      <option value="fresh">Not stale</option>
-      <option value="soon">Stale within 30 days</option>
-      <option value="stale">Stale</option>
-    </select>
     <div id="view-switch" class="segmented" role="group" aria-label="View">
       <button type="button" data-view="graph" aria-pressed="true">Graph</button>
       <button type="button" data-view="tree" aria-pressed="false">Tree</button>
       <button type="button" data-view="table" aria-pressed="false">Table</button>
     </div>
-    <select id="color-by" aria-label="Colour concepts by">
-      <option value="type">Colour: type</option>
-      <option value="trust">Colour: trust</option>
-      <option value="freshness">Colour: freshness</option>
-    </select>
-    <button id="hood-toggle" class="graph-only" type="button" aria-pressed="false" title="Show only the open concept and the concepts it links to or is linked from">Neighbourhood</button>
-    <select id="layout" class="graph-only" aria-label="Graph layout">
-      <option value="cose">Force (cose)</option>
-      <option value="concentric">Concentric (hubs in centre)</option>
-      <option value="breadthfirst">Breadth-first (hierarchy)</option>
-      <option value="circle">Circle</option>
-      <option value="grid">Grid</option>
-    </select>
-    <button id="reset" type="button">Reset</button>
-    <button id="reading-toggle" type="button" aria-pressed="false">Reading view</button>
-    <button id="theme-toggle" type="button">Dark theme</button>
+    <div class="popover-wrap">
+      <button id="filters-toggle" type="button" aria-expanded="false" aria-controls="filters-panel" title="Search mode, and filters by type, trust and freshness">Filters <span id="filters-count" class="count-badge" hidden>0</span></button>
+      <div id="filters-panel" class="popover" role="group" aria-label="Filters" hidden>
+        <label class="field"><span>Search mode</span>
+          <select id="search-mode" title="Ranked: relevance, with stale and unverified concepts ranked lower. Contains: a plain match on title, path or tag.">
+            <option value="ranked">Ranked</option>
+            <option value="contains">Contains</option>
+          </select>
+        </label>
+        <label class="field"><span>Type</span>
+          <select id="filter-type"><option value="">All types</option></select>
+        </label>
+        <label class="field"><span>Trust</span>
+          <select id="filter-trust">
+            <option value="">Any trust</option>
+            <option value="human-reviewed">Human reviewed</option>
+            <option value="machine-confirmed">Machine confirmed</option>
+            <option value="unverified">Unverified</option>
+          </select>
+        </label>
+        <label class="field"><span>Freshness</span>
+          <select id="filter-fresh">
+            <option value="">Any freshness</option>
+            <option value="fresh">Not stale</option>
+            <option value="soon">Stale within 30 days</option>
+            <option value="stale">Stale</option>
+          </select>
+        </label>
+        <button id="clear-filters" type="button" disabled>Clear filters</button>
+      </div>
     </div>
+    <div id="filter-chips" class="filter-chips" hidden></div>
+    <button id="reset" type="button" hidden>Reset</button>
+    <div class="popover-wrap popover-end">
+      <button id="display-toggle" type="button" aria-expanded="false" aria-controls="display-panel">Display</button>
+      <div id="display-panel" class="popover" role="group" aria-label="Display" hidden>
+        <label class="field"><span>Colour</span>
+          <select id="color-by">
+            <option value="type">By type</option>
+            <option value="trust">By trust</option>
+            <option value="freshness">By freshness</option>
+          </select>
+        </label>
+        <button id="hood-toggle" class="graph-only" type="button" aria-pressed="false" title="Show only the open concept and the concepts it links to or is linked from">Neighbourhood</button>
+        <label class="field graph-only"><span>Graph layout</span>
+          <select id="layout">
+            <option value="cose">Force (cose)</option>
+            <option value="concentric">Concentric (hubs in centre)</option>
+            <option value="breadthfirst">Breadth-first (hierarchy)</option>
+            <option value="circle">Circle</option>
+            <option value="grid">Grid</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <button id="reading-toggle" type="button" aria-pressed="false" title="Reading view: hide the graph and widen the concept">Reading</button>
+    <button id="theme-toggle" type="button" title="Switch to dark theme">Dark</button>
   </div>
 </header>
 <div id="search-results" role="listbox" aria-label="Ranked results" hidden></div>
@@ -959,6 +981,7 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 
 /* Top bar */
 .topbar {
+  position: relative; /* the Filters and Display panels are positioned against the bar */
   display: flex;
   flex-wrap: wrap;
   gap: 8px 16px;
@@ -971,9 +994,57 @@ button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent);
 .brand { display: flex; align-items: baseline; gap: 10px; }
 .brand strong { font-size: 15px; color: var(--heading); }
 .brand span { font-size: 12px; color: var(--text-muted); }
-.controls { display: flex; flex-wrap: wrap; gap: 8px; }
+.controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .controls input { width: 210px; }
-.chips { display: contents; }
+/* Popovers: Filters and Display open under their button; one at a time, see openPanel() */
+.popover-wrap { position: relative; }
+.popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 10px;
+  min-width: 240px;
+  padding: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.22);
+}
+.popover-end .popover { left: auto; right: 0; }
+.popover .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--text-muted); }
+.popover .field select { font-size: 13px; color: var(--text); }
+.popover button:disabled { opacity: 0.5; cursor: not-allowed; }
+.count-badge {
+  display: inline-block;
+  min-width: 18px;
+  margin-left: 4px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--surface);
+  font-size: 11px;
+  line-height: 18px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* One removable chip per active filter, next to the Filters button */
+.filter-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 6px 2px 10px;
+  border-radius: 999px;
+  border-color: var(--accent);
+  color: var(--accent);
+  font-size: 12px;
+}
+.filter-chip:hover { background: var(--surface-2); }
+.filter-chip span[aria-hidden] { font-size: 14px; line-height: 1; }
 #search-results {
   position: fixed;
   z-index: 40;
@@ -1475,14 +1546,13 @@ code { font-family: ui-monospace, "SF Mono", "Cascadia Code", Consolas, monospac
   #graph-pane { flex: 0 0 40vh; border-right: 0; border-bottom: 1px solid var(--border); }
   body[data-view="table"]:not(.reading) #graph-pane { flex: 1; }
   #detail-content, #detail-empty { padding: 24px 18px 56px; }
-  /* A compact bar: the search box on its own line, every other control in one swipeable row */
+  /* A compact bar: the search box on its own line, the other controls wrap beneath it */
   .topbar { padding: 8px 12px; gap: 4px 12px; }
-  .controls { flex: 1 1 100%; flex-direction: column; gap: 6px; min-width: 0; max-width: 100%; }
-  .topbar { overflow: hidden; }
-  .controls input { width: 100%; }
-  .chips { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; margin: 0 -12px; padding: 0 12px 4px; }
-  .chips::-webkit-scrollbar { display: none; }
-  .chips > * { flex: 0 0 auto; }
+  .controls { flex: 1 1 100%; gap: 6px; min-width: 0; }
+  .controls input { flex: 1 1 100%; width: 100%; }
+  /* The panels become full-width sheets under the bar */
+  .popover-wrap { position: static; }
+  .popover, .popover-end .popover { left: 0; right: 0; top: 100%; min-width: 0; max-height: 70vh; overflow-y: auto; border-width: 1px 0; border-radius: 0; box-shadow: 0 10px 20px rgba(15, 23, 42, 0.18); }
   .controls input, .controls select, .controls button { min-height: 36px; font-size: 14px; }
   #graph-pane { flex-basis: 30vh; overflow: hidden; }
   /* The colour key becomes one swipeable line so it does not cover the graph */
@@ -2630,6 +2700,7 @@ const JS = `
     });
     refreshLists();
     renderResults();
+    refreshToolbar();
   }
   $("search").addEventListener("input", applyFilters);
   $("search").addEventListener("focus", renderResults);
@@ -2657,6 +2728,86 @@ const JS = `
     cy.layout(layoutOptions($("layout").value)).run();
     cy.fit(undefined, 40);
   });
+
+  // --- Toolbar: Filters and Display popovers, filter chips, the Reset button's visibility ---
+  const FILTER_SELECTS = [
+    { id: "filter-type", label: "Type" },
+    { id: "filter-trust", label: "Trust" },
+    { id: "filter-fresh", label: "Freshness" },
+  ];
+  const panels = [
+    { button: $("filters-toggle"), panel: $("filters-panel") },
+    { button: $("display-toggle"), panel: $("display-panel") },
+  ];
+  function closePanel(entry) {
+    entry.panel.hidden = true;
+    entry.button.setAttribute("aria-expanded", "false");
+  }
+  function openPanel(entry) {
+    for (const other of panels) if (other !== entry) closePanel(other);
+    entry.panel.hidden = false;
+    entry.button.setAttribute("aria-expanded", "true");
+  }
+  for (const entry of panels) {
+    entry.button.addEventListener("click", () => {
+      if (entry.panel.hidden) openPanel(entry);
+      else closePanel(entry);
+    });
+  }
+  // A click anywhere outside a button and its panel closes it. Escape closes it too, unless a
+  // handler already used the key (the search box closing its results list).
+  document.addEventListener("pointerdown", (event) => {
+    for (const entry of panels) {
+      if (!entry.panel.hidden && !entry.panel.parentElement.contains(event.target)) closePanel(entry);
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key !== "Escape" || event.defaultPrevented) return;
+    const open = panels.find((entry) => !entry.panel.hidden);
+    if (!open) return;
+    const hadFocus = open.panel.contains(document.activeElement);
+    closePanel(open);
+    if (hadFocus) open.button.focus();
+  });
+
+  function refreshToolbar() {
+    const active = FILTER_SELECTS.filter((f) => $(f.id).value !== "");
+    const count = $("filters-count");
+    count.textContent = String(active.length);
+    count.hidden = active.length === 0;
+    $("clear-filters").disabled = active.length === 0;
+    const chips = active.map((f) => {
+      const select = $(f.id);
+      const text = select.options[select.selectedIndex].textContent;
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "filter-chip";
+      chip.title = "Remove this filter";
+      chip.setAttribute("aria-label", "Remove filter " + f.label + ": " + text);
+      const label = document.createElement("span");
+      label.textContent = f.label + ": " + text;
+      const x = document.createElement("span");
+      x.setAttribute("aria-hidden", "true");
+      x.textContent = "×";
+      chip.append(label, x);
+      chip.addEventListener("click", () => {
+        select.value = "";
+        $("filters-toggle").focus();
+        applyFilters();
+      });
+      return chip;
+    });
+    $("filter-chips").replaceChildren(...chips);
+    $("filter-chips").hidden = chips.length === 0;
+    // Reset only has something to clear while a query or a filter is set.
+    $("reset").hidden = active.length === 0 && $("search").value === "";
+  }
+  $("clear-filters").addEventListener("click", () => {
+    for (const f of FILTER_SELECTS) $(f.id).value = "";
+    applyFilters();
+    $("filters-toggle").focus();
+  });
+  refreshToolbar();
 
   // --- Views: graph, tree, table ---------------------------------------------
   let view = "graph";
@@ -2919,8 +3070,13 @@ const JS = `
     }
   });
 
+  // The button names the theme it switches to; the full wording lives in aria-label and title.
   function updateThemeButton() {
-    $("theme-toggle").textContent = theme === "dark" ? "Light theme" : "Dark theme";
+    const to = theme === "dark" ? "light" : "dark";
+    const button = $("theme-toggle");
+    button.textContent = to === "dark" ? "Dark" : "Light";
+    button.title = "Switch to " + to + " theme";
+    button.setAttribute("aria-label", "Switch to " + to + " theme");
   }
   $("theme-toggle").addEventListener("click", () => {
     theme = theme === "dark" ? "light" : "dark";

@@ -102,8 +102,9 @@ do not prove it reads well.
 - **Vendored OKF spec**: never hand-edit `references/okf-spec/` or `vendor/`. Use
   `npm run spec -- update` (copies `SPEC.md`, `LICENSE.md`, writes `UPSTREAM.json`). CI
   runs `spec status` weekly and fails when upstream moves.
-- **Screenshots**: don't edit `docs/images/`; the `screenshots` workflow regenerates and
-  commits them on `main`. Run `npm run screenshots` only if you need them locally.
+- **Screenshots**: don't edit `docs/images/`; the `screenshots` workflow regenerates them
+  and commits them to the `chore/screenshots` branch (never to `main`), with a pull request
+  to merge. Run `npm run screenshots` only if you need them locally.
 
 ## CI
 

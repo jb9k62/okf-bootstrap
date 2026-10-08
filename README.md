@@ -261,9 +261,9 @@ allowed (`erasableSyntaxOnly`): no enums, namespaces or parameter properties.
 
 **Screenshots** follow the viewer as it improves: `npm run screenshots` rebuilds every image
 in `docs/images` (light and dark), and the
-[screenshots workflow](.github/workflows/screenshots.yml) does the same on `main` whenever the
-viewer, the widgets, the demo or the script change, committing the result if any image
-differs. Run it by hand from the Actions tab after anything else that changes the look. To
+[screenshots workflow](.github/workflows/screenshots.yml) does the same whenever the viewer, the widgets, the demo or the script change on `main`. If
+any image differs it commits the result to the `chore/screenshots` branch and opens a pull
+request; `main` itself is never pushed to. Run it by hand from the Actions tab after anything else that changes the look. To
 add a shot, add an entry to `SHOTS` in [`scripts/screenshots.mts`](scripts/screenshots.mts).
 
 **The OKF spec** is tracked two ways: `vendor/knowledge-catalog` is a shallow submodule

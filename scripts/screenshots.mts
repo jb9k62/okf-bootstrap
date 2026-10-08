@@ -7,7 +7,8 @@
  * Builds the example widgets, writes the demo viewer to .cache/, opens it in headless Chromium
  * (playwright), and saves each shot in a light and a dark variant: <name>-light.png and
  * <name>-dark.png, which the README pairs with <picture> so GitHub shows the one matching the
- * reader's theme. The .github/workflows/screenshots.yml workflow runs this and commits changes.
+ * reader's theme. The .github/workflows/screenshots.yml workflow runs this and commits changes to the
+ * chore/screenshots branch.
  *
  * Needs `npx playwright install chromium`, and network access: the viewer loads its libraries
  * from a CDN. Fonts come from the machine, so shots taken locally and in CI can differ slightly.

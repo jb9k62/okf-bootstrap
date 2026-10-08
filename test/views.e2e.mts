@@ -987,6 +987,46 @@ describe('viewer views', { timeout: 120_000 }, () => {
     }
   });
 
+  // The head script sets --split before the viewer script runs. The Cytoscape request is held, and the parser
+  // waits on it, so the page is paused after the head script and before the viewer script. The width must
+  // already be on the page while it waits.
+  view('A: the stored width is set while the page waits on a script, before the viewer script runs', async () => {
+    const context = await browser!.newContext({ viewport: { width: 1400, height: 800 } });
+    const p = await context.newPage();
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    try {
+      await p.addInitScript(() => {
+        try {
+          sessionStorage.setItem('okf-split', '55');
+        } catch {}
+      });
+      await p.route(/^https:/, (route) => {
+        const body = localLib(route.request().url());
+        if (body) return route.fulfill({ contentType: 'text/javascript', body });
+        return route.continue();
+      });
+      // Registered after the catch-all, so it is matched first. The request waits until the test releases it.
+      await p.route(/cytoscape@/, async (route) => {
+        await gate;
+        const body = localLib(route.request().url());
+        if (body) return route.fulfill({ contentType: 'text/javascript', body });
+        return route.continue();
+      });
+      await p.goto('file://' + path.join(dir, 'viz.html'), { waitUntil: 'commit' });
+      await p.waitForFunction(() => document.documentElement.style.getPropertyValue('--split') === '55', undefined, { timeout: 5_000 });
+      assert.equal(await p.evaluate(() => (window as unknown as { __OKF_VIEW__?: unknown }).__OKF_VIEW__ === undefined), true, 'the viewer script has not run');
+      release();
+      await p.waitForFunction('window.__OKF_VIEW__ && window.cytoscape', undefined, { timeout: 20_000 });
+      assert.equal(await p.getAttribute('#divider', 'aria-valuetext'), '55% graph', 'the viewer keeps the stored width');
+    } finally {
+      release();
+      await context.close();
+    }
+  });
+
   // B: the search modal. Focus must stay in it, and it must close from wherever focus is.
   view('search: a real click on the box opens the modal with focus in it, and typing searches', async () => {
     const p = await openViewer();
@@ -1084,6 +1124,17 @@ describe('viewer views', { timeout: 120_000 }, () => {
             document.getElementById('divider')!.releasePointerCapture((window as unknown as { pid: number }).pid);
           }
         }, lose);
+        // The button is still held. The drag must already be over, and the divider must have let go of the pointer.
+        // lostpointercapture is dispatched as a task after the release, so wait for the class rather than read it at once.
+        const ended = await p
+          .waitForFunction(() => !document.body.classList.contains('dragging-split'), undefined, { timeout: 2_000 })
+          .then(() => true, () => false);
+        assert.equal(ended, true, `${lose} ends the drag before the button comes up`);
+        assert.equal(
+          await p.evaluate(() => document.getElementById('divider')!.hasPointerCapture((window as unknown as { pid: number }).pid)),
+          false,
+          `${lose} releases the pointer capture`,
+        );
         // Off the divider, so its own pointerup cannot end the drag.
         await p.mouse.move(x - 200, y, { steps: 2 });
         await p.mouse.up();
@@ -1159,6 +1210,9 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
     }
     page = await browser.newPage({ viewport: { width: 1400, height: 800 } });
     page.on('pageerror', (e) => pageErrors.push(e.message));
+    // Ctrl+K from a text field is the macOS editing command, so the viewer's rule depends on the platform. These
+    // tests pin a non-macOS platform so they run the same on every machine; the macOS test sets its own.
+    await page.addInitScript(() => Object.defineProperty(navigator, 'platform', { configurable: true, get: () => 'Linux x86_64' }));
     await page.route(/^https:/, (route) => {
       const body = localLib(route.request().url());
       if (body) return route.fulfill({ contentType: 'text/javascript', body });
@@ -1495,5 +1549,121 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
     assert.equal(await dispatchKey({ key: 'z', code: 'KeyZ' }), false, 'z is left alone');
     assert.equal(await dispatchKey({ key: 'z', code: 'KeyZ', ctrlKey: true }), false, 'Ctrl+Z is left alone');
     await press('1');
+  });
+
+  // The keys below are what the browser reports, not the keys a US keyboard would make. On a German layout
+  // '/' is Shift+7, so the event has key '/' and shiftKey. On AZERTY the digits need Shift, and the unshifted
+  // key on the Digit1-3 keys is '&', 'é' and '"'. Numpad keys with NumLock off report End, Left and so on.
+  shortcut('shifted layouts: German / and AZERTY 1 2 3 work, while a shifted letter and US Shift+1 do not', async () => {
+    await press('2');
+    assert.equal(await viewOf(), 'tree');
+    assert.equal(await dispatchKey({ key: '&', code: 'Digit1' }), true, 'AZERTY unshifted 1 is prevented');
+    assert.equal(await viewOf(), 'graph', 'AZERTY 1 (key &) switches to the graph');
+    assert.equal(await dispatchKey({ key: 'é', code: 'Digit2' }), true);
+    assert.equal(await viewOf(), 'tree', 'AZERTY 2 (key é) switches to the tree');
+    assert.equal(await dispatchKey({ key: '"', code: 'Digit3' }), true);
+    assert.equal(await viewOf(), 'table', 'AZERTY 3 (key ") switches to the table');
+    assert.equal(await dispatchKey({ key: '1', code: 'Digit1', shiftKey: true }), true, 'AZERTY Shift+& makes key 1');
+    assert.equal(await viewOf(), 'graph');
+
+    assert.equal(await dispatchKey({ key: '!', code: 'Digit1', shiftKey: true }), false, 'US Shift+1 (key !) is not prevented');
+    assert.equal(await dispatchKey({ key: 'End', code: 'Numpad1' }), false, 'Numpad1 with NumLock off (key End) is not prevented');
+    assert.equal(await viewOf(), 'graph', 'neither changes the view');
+    assert.equal(await dispatchKey({ key: 'F', code: 'KeyF', shiftKey: true }), false, 'a shifted letter is not prevented');
+    assert.equal(await expanded('#filters-toggle'), 'false');
+
+    assert.equal(await dispatchKey({ key: '/', code: 'Digit7', shiftKey: true }), true, 'German Shift+7 (key /) is prevented');
+    assert.equal(await modalShown(), true, 'and opens search');
+    await press('Escape');
+    assert.equal(await modalShown(), false);
+    // Focus is still in the top-bar box after Escape, where ? is typed, so move it out first.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    assert.equal(await dispatchKey({ key: '?', code: 'Slash', shiftKey: true }), true, '? (shifted) still toggles the badges');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('kbd-hints')), true);
+    await press('Escape');
+    await press('1');
+  });
+
+  shortcut('after Escape closes the modal, a bare / on the box reopens it and is not typed into the box', async () => {
+    await page.click('#search');
+    assert.equal(await modalShown(), true, 'a click opens the modal');
+    await page.keyboard.type('parcel');
+    await page.keyboard.press('Escape');
+    assert.equal(await modalShown(), false, 'Escape closes it');
+    assert.equal(await focusedId(), 'search', 'focus is back in the box');
+    await page.keyboard.press('/');
+    assert.equal(await modalShown(), true, '/ reopens the modal');
+    assert.equal(await focusedId(), 'sm-input', 'with focus in its box');
+    assert.equal(await page.inputValue('#search'), 'parcel', 'the slash is not typed into the box');
+    assert.equal(await page.inputValue('#sm-input'), 'parcel');
+    await page.keyboard.press('Escape');
+  });
+
+  shortcut('a key during IME composition does nothing (isComposing, and keyCode 229 in older browsers)', async () => {
+    const composing = await page.evaluate(() => {
+      const event = new KeyboardEvent('keydown', { key: '2', code: 'Digit2', bubbles: true, cancelable: true, isComposing: true });
+      document.body.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    assert.equal(composing, false, 'isComposing: not prevented');
+    const legacy = await page.evaluate(() => {
+      const event = new KeyboardEvent('keydown', { key: '2', code: 'Digit2', bubbles: true, cancelable: true });
+      Object.defineProperty(event, 'keyCode', { get: () => 229 });
+      document.body.dispatchEvent(event);
+      return event.defaultPrevented;
+    });
+    assert.equal(legacy, false, 'keyCode 229: not prevented');
+    assert.equal(await viewOf(), 'graph', 'the view does not change');
+  });
+
+  shortcut('on macOS Ctrl+K in a text box is left to the box; elsewhere it still opens search', async () => {
+    // Ctrl+K is kill-to-end-of-line in macOS text fields, so the shortcut stands aside there.
+    const realPlatform = await page.evaluate(() => navigator.platform);
+    const setPlatform = (value: string) =>
+      page.evaluate((v) => Object.defineProperty(navigator, 'platform', { configurable: true, get: () => v }), value);
+    await setPlatform('MacIntel');
+    try {
+      await page.click('#search');
+      await page.keyboard.press('Escape');
+      assert.equal(await focusedId(), 'search', 'focus is in the top-bar box, with the modal closed');
+      await page.keyboard.press('Control+k');
+      assert.equal(await modalShown(), false, 'Ctrl+K in the box does not open search on macOS');
+      assert.equal(await dispatchKey({ key: 'k', code: 'KeyK', ctrlKey: true }), false, 'and is not prevented');
+      await setPlatform(realPlatform);
+      await page.keyboard.press('Control+k');
+      assert.equal(await modalShown(), true, 'off macOS, Ctrl+K in the box opens search');
+      await page.keyboard.press('Escape');
+    } finally {
+      await setPlatform(realPlatform);
+    }
+  });
+
+  shortcut('aria-keyshortcuts names n only while Neighbourhood works, in the graph view', async () => {
+    const aria = () => page.getAttribute('#hood-toggle', 'aria-keyshortcuts');
+    assert.equal(await aria(), 'n');
+    await press('2');
+    assert.equal(await aria(), null, 'the tree view does not name n');
+    await press('1');
+    assert.equal(await aria(), 'n');
+  });
+
+  shortcut('the buttons name their key in the title, and the search box names / and Ctrl+K', async () => {
+    const titles = () =>
+      page.evaluate(() => ({
+        filters: document.getElementById('filters-toggle')!.title,
+        reading: document.getElementById('reading-toggle')!.title,
+        theme: document.getElementById('theme-toggle')!.title,
+        hood: document.getElementById('hood-toggle')!.title,
+        search: document.getElementById('search')!.title,
+      }));
+    const t = await titles();
+    assert.equal(t.filters, 'Search mode, and filters by type, trust and freshness (f)');
+    assert.equal(t.reading, 'Reading view: hide the graph and widen the concept (r)');
+    assert.match(t.theme, /^Switch to (dark|light) theme \(t\)$/);
+    assert.equal(t.hood, 'Show only the open concept and the concepts it links to or is linked from (n)');
+    assert.equal(t.search, 'Search (/ or Ctrl+K). Press ? for shortcuts');
+    await press('t');
+    assert.match((await titles()).theme, /\(t\)$/, 'the theme title keeps its key after a switch');
+    await press('t');
   });
 });

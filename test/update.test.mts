@@ -206,7 +206,7 @@ describe('okf-update', () => {
 
   it('refuses --apply while a backup from an unfinished apply is there (exit 1)', () => {
     const dir = scaffold('leftover-backup');
-    const src = release('leftover-backup-src', (assets) => fs.appendFileSync(path.join(assets, 'okf-view.mts'), '// release\n'));
+    const src = release('leftover-backup-src', (assets) => fs.appendFileSync(path.join(assets, 'okf-view.mts'), '// okf-update probe marker\n'));
     const kept = path.join(dir, '.okf-update', 'backup', 'scripts', 'okf-view.mts');
     fs.mkdirSync(path.dirname(kept), { recursive: true });
     fs.writeFileSync(kept, '// the only copy of an edit\n');
@@ -214,7 +214,7 @@ describe('okf-update', () => {
     assert.equal(r.code, 1, r.out);
     assert.match(r.out, /did not finish/);
     assert.equal(read(kept), '// the only copy of an edit\n');
-    assert.doesNotMatch(read(path.join(dir, 'scripts', 'okf-view.mts')), /release/);
+    assert.doesNotMatch(read(path.join(dir, 'scripts', 'okf-view.mts')), /okf-update probe marker/);
   });
 
   it('exits 2 on a manifest key outside scripts/', () => {

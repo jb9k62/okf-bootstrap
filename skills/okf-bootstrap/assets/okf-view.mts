@@ -781,14 +781,14 @@ ${CSS}
     <span>OKF bundle</span>
   </div>
   <div class="controls">
-    <input id="search" type="search" placeholder="Search concepts" aria-label="Search concepts" role="combobox" aria-expanded="false" aria-haspopup="dialog" aria-controls="sm-list" autocomplete="off">
+    <input id="search" type="search" placeholder="Search concepts" aria-label="Search concepts" role="combobox" aria-expanded="false" aria-haspopup="dialog" aria-controls="sm-list" autocomplete="off" title="Search (/ or Ctrl+K). Press ? for shortcuts">
     <div id="view-switch" class="segmented" role="group" aria-label="View">
       <button type="button" data-view="graph" aria-pressed="true">Graph</button>
       <button type="button" data-view="tree" aria-pressed="false">Tree</button>
       <button type="button" data-view="table" aria-pressed="false">Table</button>
     </div>
     <div class="popover-wrap">
-      <button id="filters-toggle" type="button" aria-expanded="false" aria-controls="filters-panel" title="Search mode, and filters by type, trust and freshness">Filters <span id="filters-count" class="count-badge" hidden>0</span></button>
+      <button id="filters-toggle" type="button" aria-expanded="false" aria-controls="filters-panel" title="Search mode, and filters by type, trust and freshness (f)">Filters <span id="filters-count" class="count-badge" hidden>0</span></button>
       <div id="filters-panel" class="popover" role="group" aria-label="Filters" hidden>
         <label class="field"><span>Search mode</span>
           <select id="search-mode" title="Ranked: relevance, with stale and unverified concepts ranked lower. Contains: a plain match on title, path or tag.">
@@ -830,7 +830,7 @@ ${CSS}
             <option value="freshness">By freshness</option>
           </select>
         </label>
-        <button id="hood-toggle" class="graph-only" type="button" aria-pressed="false" title="Show only the open concept and the concepts it links to or is linked from">Neighbourhood</button>
+        <button id="hood-toggle" class="graph-only" type="button" aria-pressed="false" title="Show only the open concept and the concepts it links to or is linked from (n)">Neighbourhood</button>
         <label class="field graph-only"><span>Graph layout</span>
           <select id="layout">
             <option value="cose">Force (cose)</option>
@@ -842,8 +842,8 @@ ${CSS}
         </label>
       </div>
     </div>
-    <button id="reading-toggle" type="button" aria-pressed="false" title="Reading view: hide the graph and widen the concept">Reading</button>
-    <button id="theme-toggle" type="button" title="Switch to dark theme">Dark</button>
+    <button id="reading-toggle" type="button" aria-pressed="false" title="Reading view: hide the graph and widen the concept (r)">Reading</button>
+    <button id="theme-toggle" type="button" title="Switch to dark theme (t)">Dark</button>
   </div>
 </header>
 <div id="search-modal" class="sm-backdrop" hidden>
@@ -3122,8 +3122,11 @@ const JS = `
   // The browser's own focus move to #search (on mousedown, and on the mousedown a tap sends) would land on
   // the inert box and leave focus on body. Keeping the default stops it, so focus stays in the modal.
   $("search").addEventListener("mousedown", (event) => event.preventDefault());
+  // A bare / (no Ctrl, Meta or Alt) reopens the modal after Escape, rather than being typed into the box.
   $("search").addEventListener("keydown", (event) => {
-    if ((event.key === "Enter" || event.key === "ArrowDown") && !searchOpen) {
+    if (event.isComposing || event.keyCode === 229) return;
+    const slash = event.key === "/" && !event.ctrlKey && !event.metaKey && !event.altKey;
+    if ((event.key === "Enter" || event.key === "ArrowDown" || slash) && !searchOpen) {
       event.preventDefault();
       openSearch();
     }
@@ -3283,6 +3286,7 @@ const JS = `
     else previousView = view;
     view = next;
     document.body.dataset.view = view;
+    syncKeyshortcuts();
     $("tree").hidden = view !== "tree";
     $("table-wrap").hidden = view !== "table";
     for (const button of $("view-switch").querySelectorAll("button")) {
@@ -3375,7 +3379,13 @@ const JS = `
   splitDivider.addEventListener("pointerup", endSplitDrag);
   splitDivider.addEventListener("pointercancel", endSplitDrag);
   splitDivider.addEventListener("lostpointercapture", endSplitDrag);
-  window.addEventListener("blur", () => { if (splitPointer !== null) stopSplitDrag(); });
+  // A window blur ends the drag and lets go of the pointer, as a lost capture does.
+  window.addEventListener("blur", () => {
+    if (splitPointer === null) return;
+    const id = splitPointer;
+    stopSplitDrag();
+    try { splitDivider.releasePointerCapture(id); } catch {}
+  });
   splitDivider.addEventListener("dblclick", () => {
     applySplit(SPLIT_DEFAULT);
     storeSplit();
@@ -3608,8 +3618,6 @@ const JS = `
 
   $("reset").addEventListener("click", () => {
     $("search").value = "";
-    // The modal's own box shows the same query; applyFilters() below re-renders its list and status.
-    $("sm-input").value = "";
     $("filter-type").value = "";
     $("filter-trust").value = "";
     $("filter-fresh").value = "";
@@ -3635,7 +3643,7 @@ const JS = `
     const to = theme === "dark" ? "light" : "dark";
     const button = $("theme-toggle");
     button.textContent = to === "dark" ? "Dark" : "Light";
-    button.title = "Switch to " + to + " theme";
+    button.title = "Switch to " + to + " theme (t)";
     button.setAttribute("aria-label", "Switch to " + to + " theme");
   }
   $("theme-toggle").addEventListener("click", () => {
@@ -3766,8 +3774,17 @@ const JS = `
   // The search box is an input and cannot hold a badge, so its hint is the placeholder. When the
   // hint goes away, the placeholder returns to the one the search-mode control sets.
   const modePlaceholder = () => ($("search-mode").value === "ranked" ? "Search concepts" : "Filter by title, path or tag");
+  // aria-keyshortcuts names the keys that work now. Neighbourhood's n works in the graph view only, so it is named only there.
+  // setView calls this again when the view changes.
+  function syncKeyshortcuts() {
+    for (const entry of SHORTCUTS) {
+      const keys = entry.ctrl ? entry.key + " Control+" + entry.ctrl.toUpperCase() : entry.key;
+      if (entry.id === "hood" && view !== "graph") entry.el.removeAttribute("aria-keyshortcuts");
+      else entry.el.setAttribute("aria-keyshortcuts", keys);
+    }
+  }
+  syncKeyshortcuts();
   for (const entry of SHORTCUTS) {
-    entry.el.setAttribute("aria-keyshortcuts", entry.ctrl ? entry.key + " Control+" + entry.ctrl.toUpperCase() : entry.key);
     if (entry.id === "search") continue;
     entry.badge = document.createElement("kbd");
     entry.badge.className = "kbd-hint";
@@ -3799,23 +3816,35 @@ const JS = `
   const MODIFIER_KEYS = new Set(["Shift", "Control", "Alt", "Meta", "CapsLock"]);
   // Where typing goes: a text field, a select (its keys pick an option) or anything editable.
   const isTyping = (el) => !!el && (el.isContentEditable || el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT");
-  // The entry a key press asks for, or null. Ctrl+K is the only key with a modifier; Shift is allowed only for ?.
+  // macOS, where Ctrl+K in a text field is the Cocoa kill-to-end-of-line command.
+  const isMac = () => /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent || "");
+  // The entry a key press asks for, or null. Ctrl+K is the only key with a modifier. Shift is not refused as
+  // a whole: '?' and the symbols some layouts need Shift for ('/' on German) work, and only a shifted letter is refused.
   function shortcutFor(event) {
     const key = event.key.toLowerCase();
     if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) return SHORTCUTS.find((s) => s.ctrl === key) || null;
     if (event.ctrlKey || event.metaKey || event.altKey) return null;
     if (event.key === "?") return HELP;
-    if (event.shiftKey) return null;
-    return SHORTCUTS.find((s) => s.key === key) || null;
+    if (event.shiftKey && /^[a-z]$/i.test(event.key)) return null;
+    // AZERTY types 1 2 3 only with Shift, and unshifted the same keys type & é ". So a key that is not a digit
+    // takes its digit from the physical key, unshifted only: US Shift+1 is '!', and Numpad1 with NumLock off is End.
+    let name = key;
+    const digitKey = /^(?:Digit|Numpad)([1-3])$/.exec(event.code || "");
+    if (!/^[1-3]$/.test(name) && digitKey && !event.shiftKey && name.length === 1) name = digitKey[1];
+    return SHORTCUTS.find((s) => s.key === name) || null;
   }
 
   document.addEventListener("keydown", (event) => {
-    if (MODIFIER_KEYS.has(event.key) || event.repeat) return;
+    // A key that is part of an IME composition is not a shortcut (keyCode 229 is how older browsers say so).
+    if (event.isComposing || event.keyCode === 229 || MODIFIER_KEYS.has(event.key) || event.repeat) return;
     const entry = shortcutFor(event);
     const modalOpen = document.body.classList.contains("search-open");
-    // Ctrl+K reaches the search from a field too. A plain key never runs while typing, and while the
-    // search modal is open only search (its '/' refocuses the box) runs, so the modal keeps its keys.
-    const usable = !!entry && entry.when() && (event.ctrlKey || !isTyping(document.activeElement)) && (!modalOpen || entry.id === "search");
+    // Ctrl+K reaches the search from a field too, except on macOS, where it is the field's own command.
+    // A plain key never runs while typing, and while the search modal is open only search (its '/'
+    // refocuses the box) runs, so the modal keeps its keys.
+    const typing = isTyping(document.activeElement);
+    const fieldOk = event.ctrlKey ? !(typing && isMac()) : !typing;
+    const usable = !!entry && entry.when() && fieldOk && (!modalOpen || entry.id === "search");
     if (!usable) {
       hideHints();
       return;

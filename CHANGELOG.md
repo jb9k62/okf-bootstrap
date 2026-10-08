@@ -4,7 +4,7 @@
 
 - **Resizable panes**: drag the divider between the graph and the reading pane, or focus it and use the arrow keys; the width is kept for the session.
 - **Search is a modal**: a wide search with the results on the left and a preview on the right (contents, then the start of the concept); arrows and Tab move through results, Enter opens one, Escape closes. Works in Ranked and Contains modes.
-- **Keyboard shortcuts**: `/` or Ctrl+K searches; `1`, `2`, `3` switch view; `f` Filters, `d` Display, `r` Reading, `t` theme, `n` Neighbourhood, `x` Reset; `?` shows the keys on the buttons. They stay out of the way while you type.
+- **Keyboard shortcuts**: `/` or Ctrl+K searches; `1`, `2`, `3` switch view; `f` Filters, `d` Display, `r` Reading, `t` theme, `n` Neighbourhood, `x` Reset; `?` shows the keys on the buttons, and the buttons' tooltips name their key. They stay out of the way while you type. They work on German and AZERTY layouts too, and a bare `/` reopens search after Escape. On macOS, Ctrl+K in a text box is left to the box.
 - **Search and divider fixes**: clicking or tapping the search box keeps focus in the modal; Escape and Tab work from anywhere while it is open; the contents of a concept link to headings with links or emphasis in them; a drag that loses its pointer ends cleanly.
 
 ## 0.6.0 - 2026-10-08

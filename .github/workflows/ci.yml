@@ -34,6 +34,8 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: npm run test:render
       - run: npm run test:views
+      - run: npm run okf:mermaid
+      - run: npm run okf:mermaid:render
 
   spec:
     runs-on: ubuntu-latest

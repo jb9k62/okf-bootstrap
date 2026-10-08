@@ -271,10 +271,22 @@ template is a workspace member, so it is typechecked, tested and built here too.
 
 ```bash
 npm install
-npm run check               # tsc on the tools and widgets, node:test, vitest
+npm run check               # tsc on the tools and widgets, node:test, vitest, both bundles
 npm run test:render         # browser gates on the demo and an error fixture, and a fresh
                             # consumer project (needs npx playwright install chromium)
 npm run screenshots         # regenerate docs/images from the demo bundle
+```
+
+This repository documents itself with the tooling it ships: [`okf/`](okf/index.md) is its own
+design bundle and [`edukai/`](edukai/index.md) is its own agent memory. The tools run from
+`skills/okf-bootstrap/assets/` rather than generated copies under `scripts/`
+([ADR-0003](okf/adr/0003-run-the-tools-from-the-skill-assets.md)).
+
+```bash
+npm run okf:validate        # this repository's own okf/ bundle
+npm run okf:view            # render it to okf/viz.html (builds the widgets first)
+npm run edukai:brief        # what an agent is told when a session opens
+npm run edukai:recheck      # lessons whose sources changed, or whose checks no longer hold
 ```
 
 The tools are `.mts` files run by Node's type stripping, so only erasable TypeScript is

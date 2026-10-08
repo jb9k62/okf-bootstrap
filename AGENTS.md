@@ -6,10 +6,21 @@ This repo holds two **agent skills** (for pi and Claude Code) that scaffold
 It is not an app. What ships is `skills/`, `hooks/` and `extensions/`; everything else (tests,
 scripts, demo, docs) supports them.
 
+## Agent memory
+
+<!-- edukai -->
+This project keeps agent memory in ./edukai/. Lines that start `edukai:` in messages and tool
+results come from its memory hooks; treat them as project guidance. At the start of a session run
+`npm run edukai:brief` and read the overview of the domain you will work in. Record what you
+learn with the edukai skill. Before finishing, run `npm run edukai:recheck`.
+<!-- /edukai -->
+
 ## Layout
 
 | Path | What it is |
 | --- | --- |
+| `okf/` | This repository's own design bundle (dogfood): concepts, ADRs and tours for the skill itself |
+| `edukai/` | This repository's own memory bundle: lessons agents learned about this repository |
 | `skills/okf-bootstrap/SKILL.md` | The skill's entry point and its user-facing contract. Frontmatter `description` drives triggering |
 | `skills/okf-bootstrap/assets/bootstrap.mts` | Scaffolder: copies templates into a target project |
 | `skills/okf-bootstrap/assets/okf-view.mts` | Validator + graph viewer; emits one self-contained `viz.html` (~3000 lines) |
@@ -39,13 +50,17 @@ Node >= 24 is required. TypeScript runs directly (type stripping), with no build
 
 ```bash
 npm ci
-npm run check         # typecheck + unit tests + widget tests + views e2e: run before finishing
+npm run check         # typecheck + unit tests + widget tests + views e2e + both bundles: run before finishing
 npm run typecheck     # tsc for the tools, then the widget workspace
 npm test              # node --test test/*.test.mts, plus the widget workspace's tests
 npm run test:render   # Chromium: diagrams, quizzes, widgets (needs `npx playwright install chromium`)
 npm run test:views    # Chromium: layouts, Graph/Tree/Table views, neighbourhood, colour modes
+npm run okf:validate  # this repository's own okf/ bundle (types, links, timestamps)
+npm run okf:view      # build widgets, validate, write okf/viz.html
+npm run edukai:validate && npm run edukai:recheck   # the memory bundle: rules, then the queue
+npm run edukai:brief  # what an agent is told when a session opens
 npm run demo          # build widgets, then render examples/demo/okf to viz.html
-npm run demo:edukai   # the memory bundle: the session brief, then the re-check report
+npm run demo:edukai   # the demo's memory bundle: the session brief, then the re-check report
 npm run spec -- status   # is the vendored OKF spec current? (0 yes, 1 moved, 2 offline)
 ```
 
@@ -102,6 +117,10 @@ do not prove it reads well.
 - **Vendored OKF spec**: never hand-edit `references/okf-spec/` or `vendor/`. Use
   `npm run spec -- update` (copies `SPEC.md`, `LICENSE.md`, writes `UPSTREAM.json`). CI
   runs `spec status` weekly and fails when upstream moves.
+- **This repository's own bundles**: `okf/` and `edukai/` live at the root, and `npm run check`
+  validates both. The tools run from `skills/okf-bootstrap/assets/`, not generated copies under
+  `scripts/` ([ADR-0003](okf/adr/0003-run-the-tools-from-the-skill-assets.md)); never scaffold
+  `scripts/okf-*.mts` into this repo.
 - **Screenshots**: don't edit `docs/images/`; the `screenshots` workflow regenerates them
   and commits them to the `chore/screenshots` branch (never to `main`), with a pull request
   to merge. Run `npm run screenshots` only if you need them locally.

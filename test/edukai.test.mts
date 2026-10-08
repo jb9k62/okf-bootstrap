@@ -958,7 +958,9 @@ describe('the Claude Code adapter: hook', () => {
 
   it('is silent with no bundle, on malformed input and on events it does not know', () => {
     const { cwd, send } = staged('hook-quiet');
-    const bare = path.join(scratch, 'no-bundle');
+    // Outside the repository: it has a memory bundle of its own now, and the hook walks up
+    // from the working folder, so a fixture under .cache/ would find it.
+    const bare = path.join(outside, 'no-bundle');
     fs.mkdirSync(bare, { recursive: true });
     const none = run(HOOK, ['hook'], bare, { input: JSON.stringify({ hook_event_name: 'SessionStart', session_id: 's', cwd: bare }), env: { CLAUDE_PROJECT_DIR: bare } });
     assert.deepEqual([none.code, none.all], [0, '']);
@@ -1219,7 +1221,9 @@ describe('the pi adapter: extensions/edukai.ts', () => {
   });
 
   it('does nothing in a project with no memory bundle, and swallows a failing core', async () => {
-    const bare = path.join(scratch, 'pi-bare');
+    // Outside the repository: the extension walks up for edukai/index.md, and this repository
+    // has one now.
+    const bare = path.join(outside, 'pi-bare');
     fs.mkdirSync(bare, { recursive: true });
     const { fire, sent, calls } = await load(bare);
     await fire('session_start', { reason: 'startup' });

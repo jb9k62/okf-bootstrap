@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **This repository documents itself**: `okf/` is now the project's own design bundle (concepts, four decision records and two guided tours, one with a widget) and `edukai/` is its own memory bundle, with the first lessons. `npm run check` validates both, and the Mermaid gates cover them in CI. The tools run from `skills/okf-bootstrap/assets/` rather than generated copies under `scripts/` ([ADR-0003](okf/adr/0003-run-the-tools-from-the-skill-assets.md)).
 - **Resizable panes**: drag the divider between the graph and the reading pane, or focus it and use the arrow keys; the width is kept for the session.
 - **Search is a modal**: a wide search with the results on the left and a preview on the right (contents, then the start of the concept); arrows and Tab move through results, Enter opens one, Escape closes. Works in Ranked and Contains modes.
 - **Keyboard shortcuts**: `/` or Ctrl+K searches; `1`, `2`, `3` switch view; `f` Filters, `d` Display, `r` Reading, `t` theme, `n` Neighbourhood, `x` Reset; `?` shows the keys on the buttons, and the buttons' tooltips name their key. They stay out of the way while you type. They work on German and AZERTY layouts too, and a bare `/` reopens search after Escape. On macOS, Ctrl+K in a text box is left to the box. A **?** button at the end of the bar lists every key on hover (click to pin the list), so the shortcuts are discoverable without knowing one first.

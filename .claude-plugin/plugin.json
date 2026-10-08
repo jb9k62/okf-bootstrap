@@ -1,6 +1,6 @@
 {
   "name": "okf-bootstrap",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Scaffold an OKF (Open Knowledge Format) knowledge bundle into a project: validator, graph viewer, Mermaid gates, and interactive React widgets and quizzes for explainers. Optionally an agent memory bundle (edukai): sourced lessons that code re-checks, with hooks that tell the agent what they say.",
   "author": {
     "name": "jb9k62"

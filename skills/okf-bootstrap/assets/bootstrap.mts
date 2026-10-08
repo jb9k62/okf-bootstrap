@@ -59,7 +59,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATES = path.join(HERE, 'templates');
 // The producer stamped into scaffolded frontmatter (OKF actor convention: <producer>/<version>).
 // Kept equal to package.json's version by the test suite.
-const VERSION = '0.4.0';
+const VERSION = '0.5.0';
 const TOOLS = ['okf-view', 'okf-mermaid', 'okf-search', 'okf-core', 'okf-rank', 'okf-edukai', 'okf-edukai-hook'] as const;
 const LEGACY_MJS: readonly string[] = ['okf-view', 'okf-mermaid'];
 const WIDGETS_DIR = 'packages/okf-widgets';

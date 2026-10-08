@@ -1579,11 +1579,11 @@ describe('the demo: Parcel tracker\'s memory', () => {
   });
 });
 
-describe('release metadata for 0.4.0', () => {
+describe('release metadata for 0.5.0', () => {
   it('keeps the version the same in all the places it lives', () => {
     const pkg = JSON.parse(read(path.join(ROOT, 'package.json')));
     const market = JSON.parse(read(path.join(ROOT, '.claude-plugin', 'marketplace.json')));
-    assert.equal(pkg.version, '0.4.0');
+    assert.equal(pkg.version, '0.5.0');
     assert.equal(JSON.parse(read(path.join(ROOT, '.claude-plugin', 'plugin.json'))).version, pkg.version);
     assert.equal(market.plugins[0].version, pkg.version);
     assert.equal(JSON.parse(read(path.join(ROOT, 'package-lock.json'))).version, pkg.version);

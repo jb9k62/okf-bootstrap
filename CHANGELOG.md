@@ -1,40 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-10-08
 
-- **edukai, an agent memory bundle** (opt-in: `bootstrap.mts --edukai`, or `--tools-only --edukai`
-  in a project that already has `okf/`). A second OKF bundle, `edukai/`, holds what agents have
-  learned as **lessons**: one claim each, with the files it rests on pinned by a content digest
-  and, where the claim is text in a file, a `check` (`contains`, `lacks`, `matches`, `exists`)
-  that code re-runs. The new `scripts/okf-edukai.mts` creates lessons (`new`), pins and signs
-  them (`verify`), replaces them without deleting (`supersede`), builds the syllabus and the
-  hooks' cache (`index`), and derives every lesson's state (`recheck`: fresh, renewable,
-  suspect, stale, failed, broken, unverified, superseded; `--write` renews the ones whose checks
-  still hold, `--strict` fails a build on broken, failed or suspect, never because time passed).
-  New scripts: `edukai:validate`, `edukai:index`, `edukai:recheck`, `edukai:brief`,
-  `edukai:search`, `edukai:view`. Spec: `docs/specs/edukai-memory-bundle.md`.
-- **Memory hooks for both harnesses**: a Claude Code plugin hook (`hooks/hooks.json`) and a pi
-  extension (`extensions/edukai.ts`, pi 1.0+) tell the agent what the bundle says when a session
-  opens or is compacted, name the lessons that cite a file when it reads or edits that file, and
-  stop it from finishing with a lesson its own edit just broke. Both call
-  `okf-edukai-hook.mts`, which has no dependencies, reads only a JSON cache, and never runs
-  project code. Silent in a project with no `edukai/` at or above the working folder, and on a
-  Node older than 22.18. A lesson that is already failed, broken, suspect or stale is named as
-  such when its file is read, and is never counted as the session's own breakage.
-  `EDUKAI_NUDGE=0` turns the finish nudge off; `EDUKAI_DEBUG=1` shows hook errors. A fresh
-  clone needs one `npm run edukai:index`.
-- **A second skill, `edukai`**: what is worth a lesson, how sure to say you are, and what to do
-  with one that failed its re-check. `npm run install-skill` now links every skill under `skills/`.
-- **`okf:recheck`** for design bundles: `okf-edukai.mts verify <concept> --bundle okf --by <actor>`
-  pins a concept's `sources`, and `npm run okf:recheck` reports when a pinned file changes.
-- **Validator**: three new issue kinds on any bundle. `lesson` (a `type: Lesson` missing a
-  required key, an unknown `confidence`, `inferred` with a `verified` entry, a malformed `check`),
-  `supersede` (`supersedes` and `superseded_by` must name each other, the old concept must be
-  `status: deprecated`, no cycles; ADRs can use them, and the ADR template now does) and `budget`
-  (a Lesson body over 30 lines, an Overview over 60). `Lesson` and `Overview` get graph colours,
-  and the report prints the confidence breakdown.
-- **Search knows lessons**: `--confidence tested|observed|inferred`, and a superseded concept's
-  badge says what replaced it.
+Search and the memory tools: more accurate, harder to stall, and faster to start.
+
 - **Search finds more of what was meant**: a query word now finds its other forms ("boxes" and
   "box", "caching" and "cache", "retried" and "retry"), a camelCase word by its parts or as one
   word ("GitHub", "git hub", "github"), and an accented word without its accents. A word the
@@ -70,6 +39,42 @@
   `okf-edukai new` writes nothing until the lesson is known to be valid, and two `new` commands
   racing on one domain no longer collide on its overview stub. Search snippets keep inline code
   and show the part of a long line that matched.
+
+## 0.4.0 - 2026-10-07
+
+- **edukai, an agent memory bundle** (opt-in: `bootstrap.mts --edukai`, or `--tools-only --edukai`
+  in a project that already has `okf/`). A second OKF bundle, `edukai/`, holds what agents have
+  learned as **lessons**: one claim each, with the files it rests on pinned by a content digest
+  and, where the claim is text in a file, a `check` (`contains`, `lacks`, `matches`, `exists`)
+  that code re-runs. The new `scripts/okf-edukai.mts` creates lessons (`new`), pins and signs
+  them (`verify`), replaces them without deleting (`supersede`), builds the syllabus and the
+  hooks' cache (`index`), and derives every lesson's state (`recheck`: fresh, renewable,
+  suspect, stale, failed, broken, unverified, superseded; `--write` renews the ones whose checks
+  still hold, `--strict` fails a build on broken, failed or suspect, never because time passed).
+  New scripts: `edukai:validate`, `edukai:index`, `edukai:recheck`, `edukai:brief`,
+  `edukai:search`, `edukai:view`. Spec: `docs/specs/edukai-memory-bundle.md`.
+- **Memory hooks for both harnesses**: a Claude Code plugin hook (`hooks/hooks.json`) and a pi
+  extension (`extensions/edukai.ts`, pi 1.0+) tell the agent what the bundle says when a session
+  opens or is compacted, name the lessons that cite a file when it reads or edits that file, and
+  stop it from finishing with a lesson its own edit just broke. Both call
+  `okf-edukai-hook.mts`, which has no dependencies, reads only a JSON cache, and never runs
+  project code. Silent in a project with no `edukai/` at or above the working folder, and on a
+  Node older than 22.18. A lesson that is already failed, broken, suspect or stale is named as
+  such when its file is read, and is never counted as the session's own breakage.
+  `EDUKAI_NUDGE=0` turns the finish nudge off; `EDUKAI_DEBUG=1` shows hook errors. A fresh
+  clone needs one `npm run edukai:index`.
+- **A second skill, `edukai`**: what is worth a lesson, how sure to say you are, and what to do
+  with one that failed its re-check. `npm run install-skill` now links every skill under `skills/`.
+- **`okf:recheck`** for design bundles: `okf-edukai.mts verify <concept> --bundle okf --by <actor>`
+  pins a concept's `sources`, and `npm run okf:recheck` reports when a pinned file changes.
+- **Validator**: three new issue kinds on any bundle. `lesson` (a `type: Lesson` missing a
+  required key, an unknown `confidence`, `inferred` with a `verified` entry, a malformed `check`),
+  `supersede` (`supersedes` and `superseded_by` must name each other, the old concept must be
+  `status: deprecated`, no cycles; ADRs can use them, and the ADR template now does) and `budget`
+  (a Lesson body over 30 lines, an Overview over 60). `Lesson` and `Overview` get graph colours,
+  and the report prints the confidence breakdown.
+- **Search knows lessons**: `--confidence tested|observed|inferred`, and a superseded concept's
+  badge says what replaced it.
 - **Demo**: Parcel tracker gains a memory bundle (`examples/demo/edukai`, nine lessons, two wrong
   on purpose), a few source files for them to cite, ADR-0004, a tour of the lesson lifecycle,
   a reference concept on how the memory is laid out, searched and kept true

@@ -132,7 +132,7 @@ Node 24+ is required: the tools are TypeScript that Node runs directly, with no 
 **pi**, as a package (pin a tag for reproducible installs):
 
 ```bash
-pi install git:github.com/jb9k62/okf-bootstrap@v0.4.0
+pi install git:github.com/jb9k62/okf-bootstrap@v0.5.0
 ```
 
 **Claude Code**, as a plugin from this repo's marketplace:

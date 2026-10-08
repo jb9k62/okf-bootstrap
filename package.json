@@ -1,6 +1,6 @@
 {
   "name": "okf-bootstrap",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Agent skills (pi, Claude Code) that scaffold two OKF knowledge bundles into a project: design docs with a validator, graph viewer, Mermaid gates and interactive React widgets, and an agent memory bundle (edukai) that re-checks itself through harness hooks.",
   "license": "MIT",

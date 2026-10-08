@@ -3712,7 +3712,7 @@ const JS = `
   const isShown = (el) => !!el && el.getClientRects().length > 0;
   const viewButton = (name) => $("view-switch").querySelector('button[data-view="' + name + '"]');
   const SHORTCUTS = [
-    { id: "search", key: "/", label: "Search", el: $("search"), run: () => $("search").focus(), when: () => true },
+    { id: "search", key: "/", label: "Search", el: $("search"), run: () => ($("search-modal").hidden ? $("search") : $("sm-input")).focus(), when: () => true },
     { id: "view-graph", key: "1", label: "Graph view", el: viewButton("graph"), run: () => viewButton("graph").click(), when: () => true },
     { id: "view-tree", key: "2", label: "Tree view", el: viewButton("tree"), run: () => viewButton("tree").click(), when: () => true },
     { id: "view-table", key: "3", label: "Table view", el: viewButton("table"), run: () => viewButton("table").click(), when: () => true },

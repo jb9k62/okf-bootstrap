@@ -1052,7 +1052,10 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
 
   shortcut('Ctrl+/ focuses the search box', async () => {
     await press('Control+/');
-    assert.equal(await page.evaluate(() => document.activeElement?.id), 'search');
+    assert.equal(await page.isVisible('#search-modal'), true, 'the search modal opens');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'sm-input');
+    await page.keyboard.press('Escape');
+    assert.equal(await page.isVisible('#search-modal'), false);
   });
 
   shortcut('Ctrl+1, 2 and 3 switch the view', async () => {
@@ -1176,14 +1179,15 @@ describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
   });
 
   shortcut('while the search modal is open only search and reset work', async () => {
-    await page.evaluate(() => document.body.classList.add('search-open'));
+    await press('Control+/');
     try {
+      assert.equal(await page.evaluate(() => document.body.classList.contains('search-open')), true);
       assert.equal(await dispatchKey({ key: '3', code: 'Digit3', ctrlKey: true }), false);
       assert.equal(await viewOf(), 'graph', 'the view does not change');
       assert.equal(await dispatchKey({ key: '/', code: 'Slash', ctrlKey: true }), true);
-      assert.equal(await page.evaluate(() => document.activeElement?.id), 'search');
+      assert.equal(await page.evaluate(() => document.activeElement?.id), 'sm-input');
     } finally {
-      await page.evaluate(() => document.body.classList.remove('search-open'));
+      await page.keyboard.press('Escape');
     }
   });
 });

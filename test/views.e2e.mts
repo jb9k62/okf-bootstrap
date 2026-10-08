@@ -960,3 +960,230 @@ describe('viewer views', { timeout: 120_000 }, () => {
     }
   });
 });
+
+// B: keyboard shortcuts. Ctrl plus a key drives the toolbar, and holding Ctrl shows the keys.
+type Shortcut = { id: string; key: string; el: Element | null };
+type KeyInit = { key: string; code: string; ctrlKey?: boolean; metaKey?: boolean; altKey?: boolean; shiftKey?: boolean; repeat?: boolean };
+
+describe('viewer keyboard shortcuts', { timeout: 120_000 }, () => {
+  let dir = '';
+  let out = '';
+  let browser: Browser | undefined;
+  let page: Page;
+  let pageErrors: string[] = [];
+  let skipReason = '';
+
+  before(async () => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'okf-shortcuts-'));
+    out = path.join(dir, 'viz.html');
+    const built = spawnSync(process.execPath, [VIEWER, 'examples/demo/okf', '--out', out], {
+      cwd: ROOT,
+      encoding: 'utf8',
+    });
+    assert.equal(built.status, 0, built.stdout + built.stderr);
+
+    try {
+      const { chromium } = await import('playwright');
+      browser = await chromium.launch({ headless: true, executablePath: process.env.OKF_CHROMIUM || undefined });
+    } catch (e) {
+      skipReason = `no browser: ${e instanceof Error ? e.message.split('\n')[0] : e}`;
+      return;
+    }
+    page = await browser.newPage({ viewport: { width: 1400, height: 800 } });
+    page.on('pageerror', (e) => pageErrors.push(e.message));
+    await page.route(/^https:/, (route) => {
+      const body = localLib(route.request().url());
+      if (body) return route.fulfill({ contentType: 'text/javascript', body });
+      return route.continue();
+    });
+    await page.goto('file://' + out);
+    try {
+      await page.waitForFunction('window.__OKF_VIEW__ && window.__OKF_SHORTCUTS__ && window.marked && window.cytoscape', undefined, {
+        timeout: 20_000,
+      });
+    } catch {
+      skipReason = 'the viewer libraries did not load (no network, and not installed in node_modules)';
+    }
+  });
+
+  after(async () => {
+    await browser?.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  // Every test starts from a fresh page: graph view, panels closed, nothing searched.
+  const shortcut = (name: string, fn: () => Promise<void>) =>
+    it(name, async (t) => {
+      if (skipReason) return t.skip(skipReason);
+      pageErrors = [];
+      await page.reload();
+      await page.waitForFunction('window.__OKF_SHORTCUTS__');
+      await fn();
+      assert.deepEqual(pageErrors, [], 'page errors');
+    });
+
+  const press = (combo: string) => page.keyboard.press(combo);
+  const viewOf = () => page.getAttribute('body', 'data-view');
+  // Dispatches a keydown on the page and reports whether a handler prevented its default action.
+  const dispatchKey = (init: KeyInit) =>
+    page.evaluate(
+      (i) => !document.body.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, cancelable: true, ...i })),
+      init,
+    );
+  // The badges that are actually displayed (the CSS hides them when hints are off).
+  const visibleBadges = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('.kbd-hint')].filter((b) => getComputedStyle(b).display !== 'none').map((b) => b.textContent ?? ''),
+    );
+
+  shortcut('the registry has unique ids and keys, each with a target', async () => {
+    const list = await page.evaluate(() =>
+      (window as unknown as { __OKF_SHORTCUTS__: Shortcut[] }).__OKF_SHORTCUTS__.map((e) => ({ id: e.id, key: e.key, hasEl: e.el !== null })),
+    );
+    assert.equal(list.length, 10);
+    assert.equal(new Set(list.map((e) => e.id)).size, list.length, 'ids are unique');
+    assert.equal(new Set(list.map((e) => e.key)).size, list.length, 'keys are unique');
+    assert.ok(list.every((e) => e.hasEl), 'every entry has an element');
+    assert.deepEqual(
+      list.map((e) => e.key),
+      ['/', '1', '2', '3', 'l', 'u', 'r', 'y', 'h', 'j'],
+    );
+  });
+
+  shortcut('Ctrl+/ focuses the search box', async () => {
+    await press('Control+/');
+    assert.equal(await page.evaluate(() => document.activeElement?.id), 'search');
+  });
+
+  shortcut('Ctrl+1, 2 and 3 switch the view', async () => {
+    await press('Control+2');
+    assert.equal(await viewOf(), 'tree');
+    assert.equal(await page.getAttribute('button[data-view="tree"]', 'aria-pressed'), 'true');
+    await press('Control+3');
+    assert.equal(await viewOf(), 'table');
+    assert.equal(await page.isVisible('#table-wrap'), true);
+    await press('Control+1');
+    assert.equal(await viewOf(), 'graph');
+    assert.equal(await page.getAttribute('button[data-view="graph"]', 'aria-pressed'), 'true');
+  });
+
+  shortcut('Ctrl+l and Ctrl+u open and close Filters and Display', async () => {
+    await press('Control+l');
+    assert.equal(await page.getAttribute('#filters-toggle', 'aria-expanded'), 'true');
+    assert.equal(await page.isVisible('#filters-panel'), true);
+    await press('Control+l');
+    assert.equal(await page.getAttribute('#filters-toggle', 'aria-expanded'), 'false');
+    await press('Control+u');
+    assert.equal(await page.getAttribute('#display-toggle', 'aria-expanded'), 'true');
+    assert.equal(await page.isVisible('#display-panel'), true);
+    await press('Control+u');
+    assert.equal(await page.getAttribute('#display-toggle', 'aria-expanded'), 'false');
+  });
+
+  shortcut('Ctrl+r toggles the Reading view', async () => {
+    await press('Control+r');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('reading')), true);
+    assert.equal(await page.getAttribute('#reading-toggle', 'aria-pressed'), 'true');
+    await press('Control+r');
+    assert.equal(await page.evaluate(() => document.body.classList.contains('reading')), false);
+  });
+
+  shortcut('Ctrl+y switches the theme and back', async () => {
+    const before = await page.getAttribute('html', 'data-theme');
+    await press('Control+y');
+    assert.notEqual(await page.getAttribute('html', 'data-theme'), before, 'the theme changed');
+    await press('Control+y');
+    assert.equal(await page.getAttribute('html', 'data-theme'), before);
+  });
+
+  shortcut('Ctrl+h toggles Neighbourhood in the graph view only', async () => {
+    await press('Control+h');
+    assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'true');
+    await press('Control+h');
+    assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'false');
+    await press('Control+2');
+    await press('Control+h');
+    assert.equal(await page.getAttribute('#hood-toggle', 'aria-pressed'), 'false', 'no-op in the tree view');
+    await press('Control+1');
+  });
+
+  shortcut('Ctrl+j resets only while Reset is showing', async () => {
+    const clicks = () => page.evaluate(() => (window as unknown as Record<string, number>).resetClicks);
+    await page.evaluate(() => {
+      (window as unknown as Record<string, number>).resetClicks = 0;
+      document.getElementById('reset')!.addEventListener('click', () => {
+        (window as unknown as Record<string, number>).resetClicks++;
+      });
+    });
+    assert.equal(await page.isHidden('#reset'), true);
+    await press('Control+j');
+    assert.equal(await clicks(), 0, 'a hidden Reset is a no-op');
+
+    await page.fill('#search', 'box');
+    assert.equal(await page.isVisible('#reset'), true);
+    await press('Control+j');
+    assert.equal(await page.inputValue('#search'), '', 'the query is cleared');
+    assert.equal(await clicks(), 1);
+  });
+
+  shortcut('holding Ctrl shows a badge on each visible target, and releasing hides them', async () => {
+    await page.keyboard.down('Control');
+    const expected = await page.evaluate(() =>
+      (window as unknown as { __OKF_SHORTCUTS__: Array<{ id: string; key: string; el: Element }> }).__OKF_SHORTCUTS__
+        .filter((e) => e.id !== 'search' && e.el.getClientRects().length > 0)
+        .map((e) => 'Ctrl+' + e.key.toUpperCase()),
+    );
+    // Graph view with the panels closed: three views, Filters, Display, Reading and the theme.
+    assert.deepEqual(expected, ['Ctrl+1', 'Ctrl+2', 'Ctrl+3', 'Ctrl+L', 'Ctrl+U', 'Ctrl+R', 'Ctrl+Y']);
+    assert.deepEqual((await visibleBadges()).sort(), [...expected].sort());
+    assert.equal(await page.getAttribute('#search', 'placeholder'), 'Ctrl+/ to search');
+
+    await page.keyboard.up('Control');
+    assert.deepEqual(await visibleBadges(), []);
+    assert.equal(await page.getAttribute('#search', 'placeholder'), 'Search concepts');
+  });
+
+  shortcut('a badge follows a target that opens, and blur or a hidden tab clears the hints', async () => {
+    // Control stays held, so the bare key is pressed with it (press('Control+u') would release Control).
+    await page.keyboard.down('Control');
+    await page.keyboard.press('u');
+    assert.ok((await visibleBadges()).includes('Ctrl+H'), 'Neighbourhood shows once Display is open');
+    await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+    assert.deepEqual(await visibleBadges(), []);
+    await page.keyboard.up('Control');
+
+    await page.keyboard.down('Control');
+    await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+    assert.deepEqual(await visibleBadges(), []);
+    await page.keyboard.up('Control');
+    await press('Control+u');
+  });
+
+  shortcut('Meta, Alt, Shift and repeated combinations do nothing and are not prevented', async () => {
+    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', metaKey: true }), false);
+    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true, metaKey: true }), false);
+    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true, altKey: true }), false);
+    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true, shiftKey: true }), false);
+    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true, repeat: true }), false);
+    assert.equal(await viewOf(), 'graph');
+  });
+
+  shortcut('a matched shortcut is prevented, an unmatched Ctrl key is not', async () => {
+    assert.equal(await dispatchKey({ key: '2', code: 'Digit2', ctrlKey: true }), true, 'Ctrl+2 is prevented');
+    assert.equal(await viewOf(), 'tree');
+    assert.equal(await dispatchKey({ key: 'z', code: 'KeyZ', ctrlKey: true }), false, 'Ctrl+Z is left alone');
+    await press('Control+1');
+  });
+
+  shortcut('while the search modal is open only search and reset work', async () => {
+    await page.evaluate(() => document.body.classList.add('search-open'));
+    try {
+      assert.equal(await dispatchKey({ key: '3', code: 'Digit3', ctrlKey: true }), false);
+      assert.equal(await viewOf(), 'graph', 'the view does not change');
+      assert.equal(await dispatchKey({ key: '/', code: 'Slash', ctrlKey: true }), true);
+      assert.equal(await page.evaluate(() => document.activeElement?.id), 'search');
+    } finally {
+      await page.evaluate(() => document.body.classList.remove('search-open'));
+    }
+  });
+});

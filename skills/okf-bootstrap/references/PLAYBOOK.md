@@ -421,9 +421,11 @@ version adds:
 - raw-path link text replaced by the linked concept's title
 - graph nodes sized by incoming links, with neighbour focus when a node is selected
 - a legend
-- ranked search, the same ranking as `okf-search` run in the page: a results list with each
-  concept's trust, freshness and best-matching line, non-matches dimmed, a Match column in the
-  table; a mode switch to a plain "contains" match; type, trust and freshness filters that combine
+- ranked search, the same ranking as `okf-search` run in the page: a search modal, focused from
+  the top bar, with the results on the left (each concept's trust, freshness and best-matching
+  line) and a preview on the right (its contents, then the start of the concept); non-matches
+  dimmed, a Match column in the table; a mode switch to a plain "contains" match; type, trust and
+  freshness filters that combine
 - a reading view toggle
 - a theme that follows the system setting and is remembered
 - the page title taken from the bundle's `index.md` H1

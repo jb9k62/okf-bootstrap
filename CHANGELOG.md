@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Search is a modal**: a wide search with the results on the left and a preview on the right (contents, then the start of the concept); arrows and Tab move through results, Enter opens one, Escape closes. Works in Ranked and Contains modes.
+
 ## 0.6.0 - 2026-10-08
 
 - **`npm run okf:update`**: brings a project's generated tools (`scripts/okf-*`) up to a release.

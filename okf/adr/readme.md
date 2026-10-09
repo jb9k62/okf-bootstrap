@@ -14,6 +14,8 @@ generated: { by: okf-bootstrap/0.6.0, at: 2026-10-08T20:00:00Z }
 | [0002](/adr/0002-two-bundles-design-and-memory.md) | Keep design docs and agent memory in two separate bundles | accepted |
 | [0003](/adr/0003-run-the-tools-from-the-skill-assets.md) | Run the tools from the skill's assets, not generated copies | accepted |
 | [0004](/adr/0004-viz-html-stays-one-file.md) | Keep `viz.html` one self-contained file, with no bundler | accepted |
+| [0005](/adr/0005-name-bundles-by-what-they-hold.md) | Name each bundle for what it holds: `design/`, and an optional `ops/` | proposed |
+| [0006](/adr/0006-publish-the-tools-to-npm.md) | Publish the tools to npm as `@jb9k62/good2go` | proposed |
 
 ## Adding one
 

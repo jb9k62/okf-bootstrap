@@ -1,5 +1,11 @@
 # Bundle update log
 
+## 2026-10-09
+* **Proposed**: two decision records, neither implemented yet. Bundles named for what they
+  hold, with `design/` as the default and an optional `ops/`
+  ([ADR-0005](/adr/0005-name-bundles-by-what-they-hold.md)), and the tools published to npm
+  as `@jb9k62/good2go` ([ADR-0006](/adr/0006-publish-the-tools-to-npm.md)).
+
 ## 2026-10-08
 * **Creation**: Established the okf-bootstrap OKF v0.2 bundle: root `index.md`, `log.md`, the
   ADR area, and the first concepts and tours.

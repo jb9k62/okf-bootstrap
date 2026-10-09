@@ -18,14 +18,16 @@ check:
   - { file: hooks/edukai-hook.mjs, contains: "'../skills/okf-bootstrap/assets/okf-edukai-hook.mts'" }
 ---
 
-Both harness adapters resolve the memory hook's core from this repository's skill assets.
-`extensions/edukai.ts` (the pi adapter) computes the path from `import.meta.url`, and
+The pi extension and the Claude Code hook are thin adapters around one file,
+`skills/okf-bootstrap/assets/okf-edukai-hook.mts`, and each finds it by a path relative to
+itself. `extensions/edukai.ts` (the pi adapter) builds the path from `import.meta.url`.
 `hooks/edukai-hook.mjs` (what Claude Code runs) imports
-`../skills/okf-bootstrap/assets/okf-edukai-hook.mts` relative to itself. Neither runs code from
-the project, both load the compile cache first, and both are quiet in a project with no
-`edukai/index.md`.
+`../skills/okf-bootstrap/assets/okf-edukai-hook.mts`. So where that file lives is part of the
+contract: move or rename it, and both harnesses lose their memory hooks at once. Both adapters
+also load the compile cache first, never run code from the project, and stay quiet in a
+project with no `edukai/index.md`.
 
 ## Caveats
 
-- Moving `okf-edukai-hook.mts` under `assets/` breaks both adapters at once. That is the
-  intended early warning, but it is not caught by a test that runs inside this repository.
+- Breaking both adapters at once is the intended early warning, but no test that runs inside
+  this repository catches it. If you move the file, update both adapters in the same change.

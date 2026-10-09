@@ -4,13 +4,13 @@ okf_version: "0.2"
 
 # okf-bootstrap
 
-Design notes for **okf-bootstrap** itself: the two agent skills that scaffold an OKF bundle
-into another project, and the tools, gates and harness adapters that keep it honest. This is
-the repository's own bundle, kept in the format the skill asks other projects to use
+These are the design notes for **okf-bootstrap** itself: two agent skills that scaffold an OKF
+bundle into another project, and the tools, gates and harness adapters that keep a bundle
+honest. The notes are kept in the same format the skill asks other projects to use
 ([ADR-0001](/adr/0001-keep-this-repos-design-in-okf.md)).
 
-Start with the overview, then the tools and the gates. The tours explain the ideas a reader
-usually has to reconstruct from the code.
+New here? Read the overview, then the tools, then the gates. After that, take a tour: each one
+explains an idea you would otherwise have to piece together from the code.
 
 ## The skill
 
@@ -34,9 +34,9 @@ usually has to reconstruct from the code.
 
 ## The demo
 
-`examples/demo/` is a fictional parcel-tracking service documented with the same tooling: a
-design bundle, a memory bundle, and the lessons that go with them. `npm run demo` renders it,
-and `examples/demo/README.md` walks through the memory bundle. It is the reference for what a
-scaffolded project looks like.
+`examples/demo/` is a made-up parcel-tracking service, documented with this same tooling. It
+has a design bundle, a memory bundle and the lessons that go with them. Use it as the
+reference for what a scaffolded project looks like: `npm run demo` renders it, and
+`examples/demo/README.md` walks through the memory bundle.
 
 Update history: [log.md](/log.md).

@@ -15,8 +15,9 @@ sources:
 
 # Quality gates
 
-A bundle is checked by gates that either pass, name what is broken, or say they could not run.
-The three-way contract is the point: a gate that cannot run must never look like a pass.
+A gate is a command that checks a bundle. Every gate ends in one of three ways: it passes, it
+names what is broken, or it says it could not run. That third outcome is the point of the
+contract. A gate that cannot run must never look like a pass.
 
 | Exit | Means | What to do |
 | --- | --- | --- |
@@ -51,31 +52,37 @@ flowchart LR
 | `npm run edukai:recheck` | Reports lessons whose sources changed or went missing, or that are past `stale_after`; `-- --strict` exits 1 on broken, failed or suspect | nothing beyond the bundle |
 | `npm run okf:search -- stale` | The review queue: concepts past `stale_after` | nothing; not a gate |
 
-`npm run okf:fix` is not a gate: it rewrites the markdown so every `erDiagram` has its
-generated relationship key below it. `okf:validate` fails until it has been run, which is the
-intended order.
+`npm run okf:fix` is not a gate. It rewrites the markdown so every `erDiagram` has its
+generated relationship key below it. `okf:validate` fails until it has been run, and that is
+the intended order: fix, then validate.
 
 ## What the gates cannot prove
 
+A green gate proves less than it seems to. Know where each one stops.
+
 - **The parse gate proves the parser accepts the diagram, not that it reads well.** A diagram
-  can render correctly and still be confusing.
+  can render correctly and still confuse its reader.
 - **The render gate proves the page works, not that a person can follow it.** Look at
-  `viz.html` in light and dark, in every view, before trusting a viewer change.
+  `viz.html` in light and dark, in every view, before you trust a viewer change.
 - **Validation proves the shape, not the truth.** A concept with a `type`, working links and
   correct timestamps can still say something false. The skill's rule is that every claim is
   checked against the code before it goes in, and `verified` is added only after a person has
   read it.
-- **A passing check in a lesson proves the text is there, not that the claim is right.** A
-  check is written for the fact, never to keep a lesson green.
+- **A passing check in a lesson proves the text is there, not that the claim is right.** Write
+  a check for the fact, never to keep a lesson green.
 
 ## How this repository runs them
 
-CI has three jobs. `check` (Node 24 and 26) runs `npm run check`: typecheck, the unit tests,
-the Chromium view tests, then `okf:validate` and `edukai:validate` on this repository's own
-bundles. `render` installs Chromium and runs the diagram and view end-to-end tests, then both
-Mermaid gates (`okf:mermaid` and `okf:mermaid:render`) on this repository's own bundle. `spec`
-runs `npm run spec -- status` weekly and fails when the vendored OKF spec has moved upstream.
+CI has three jobs:
 
-The render job needs network for the CDN, which the end-to-end tests there already use. On a
-machine without one, run the parse gate and read the render gate's exit 2 as unproven. See
+- **`check`** (Node 24 and 26) runs `npm run check`: the typecheck, the unit tests, the
+  Chromium view tests (which skip when no browser is installed), then `okf:validate` and
+  `edukai:validate` on this repository's own bundles.
+- **`render`** installs Chromium and runs the diagram and view end-to-end tests, then both
+  Mermaid gates (`okf:mermaid` and `okf:mermaid:render`) on this repository's own bundle.
+- **`spec`** runs `npm run spec -- status` weekly and fails when the vendored OKF spec has
+  moved upstream.
+
+The render job needs network for the CDN, which its end-to-end tests already use. On a machine
+with no network, run the parse gate, and read the render gate's exit 2 as unproven. See
 [testing and CI](/okf-bootstrap/testing.md).

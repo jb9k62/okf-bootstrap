@@ -28,15 +28,16 @@ check:
   - { file: skills/okf-bootstrap/assets/bootstrap.mts, contains: "const VERSION = '" }
 ---
 
-The release version lives in four places and they must match: `package.json`,
-`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and the `VERSION` constant in
-`bootstrap.mts`, which is stamped into scaffolded frontmatter as the producer. `package-lock.json`
-carries it too and is bumped with `package.json`. Tests compare them: `test/bootstrap.test.mts`
-checks `VERSION` against `package.json` and the plugin manifest against `package.json`, and the
-release-metadata test in `test/edukai.test.mts` checks `package.json`, both manifests and
-`package-lock.json`. A release bumps all of them, adds a changelog entry, then tags.
+A release has one version, written in four places that must match: `package.json`,
+`.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and the `VERSION` constant
+in `bootstrap.mts`, which is stamped into scaffolded frontmatter as the producer.
+`package-lock.json` carries it too and is bumped with `package.json`. Tests catch a
+mismatch: `test/bootstrap.test.mts` compares `VERSION` and the plugin manifest with
+`package.json`, and the release-metadata test in `test/edukai.test.mts` compares
+`package.json`, both manifests and `package-lock.json`. To release, bump all of them, add a
+changelog entry, then tag.
 
 ## Caveats
 
-- The checks prove a version field exists in each file, not that the values agree. The tests are
-  what compare the values.
+- The checks here only prove that each file has a version field. They do not compare the
+  values; the tests do.

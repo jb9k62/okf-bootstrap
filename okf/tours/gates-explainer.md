@@ -11,29 +11,29 @@ sources:
   - resource: .github/workflows/ci.yml
 ---
 
-This tour is for anyone who runs a gate or reads a CI result. After it, you will know what each
-exit code means, which failures are the bundle's fault and which are the machine's, and why the
-difference is worth a whole exit code. A [quiz](#quiz) closes it.
+This tour is for anyone who runs a gate or reads a CI result. By the end you will know what
+each exit code means, which failures are the bundle's fault and which are the machine's, and
+why that difference deserves an exit code of its own. A [quiz](#quiz) closes it.
 
 ## Who is affected
 
 | Person | What a misleading gate costs them |
 | --- | --- |
-| **A contributor** | A red build that is actually a missing browser sends them hunting for a documentation bug that does not exist |
+| **A contributor** | A red build that is really a missing browser sends them hunting for a documentation bug that does not exist |
 | **A reviewer** | A green build that never ran the check lets a broken diagram through |
-| **An agent** | A tool that fails silently is one it cannot recover from, because there is nothing to fix |
+| **An agent** | A tool that fails silently gives it nothing to fix, so it cannot recover |
 
 ## Background
 
 > [!definition] Gate
 > A command that checks one property of a bundle or a page and reports the result through its
-> exit code. The scripts here are gates; `okf:fix` and `okf:search` are not, because they change
-> or read a bundle rather than judging it.
+> exit code. The check scripts here are gates. `okf:fix` and `okf:search` are not: they change
+> or read a bundle, they do not judge it.
 
-A check has three possible outcomes, not two. It can pass, it can find something wrong, or it
+A check has three possible outcomes, not two. It can pass. It can find something wrong. Or it
 can fail to run at all: no browser installed, no network for the CDN, no `mmdc` on the path.
-The third case is the dangerous one, because it looks like nothing to report. This project
-gives it its own exit code so it can never be read as a pass.
+The third is the dangerous one, because it looks like there is nothing to report. This project
+gives it an exit code of its own, so it can never be read as a pass.
 
 ## The three outcomes
 
@@ -55,14 +55,15 @@ flowchart LR
 
 ## The problem, one step at a time
 
-1. **A diagram does not parse.** `npm run okf:mermaid` exits 1 and names the file and line. Fix
-   the markdown; nothing about the setup is in question.
+1. **A diagram does not parse.** `npm run okf:mermaid` exits 1 and names the file and line.
+   Fix the markdown. Nothing about the setup is in question.
 2. **The browser is missing.** The same command exits 2: it could not run the parser at all.
-   The diagrams are neither fine nor broken; they are unproven.
-3. **A CI job reads only the exit code.** If 2 were folded into 0, a runner without a browser
-   would report every bundle as healthy. If it were folded into 1, it would blame the author.
-4. **So the code is the contract.** Every gate here shares it, and a green run always means the
-   same thing: the check ran, and it found nothing.
+   The diagrams are neither fine nor broken. They are unproven.
+3. **A CI job reads only the exit code.** Suppose 2 were folded into 0: a runner without a
+   browser would report every bundle as healthy. Suppose it were folded into 1: the runner
+   would blame the author for a fault in the machine.
+4. **So the code is the contract.** Every gate here shares it, and a green run always means
+   the same thing: the check ran, and it found nothing.
 
 ## Details
 
@@ -74,12 +75,13 @@ flowchart LR
 > [!warning] A passing gate is narrower than it looks
 > Validation proves a concept has a type, working links and real timestamps. It cannot prove
 > the concept is true. The parse gate proves Mermaid accepts a diagram, not that a reader can
-> follow it. The writing checklist exists because a gate cannot check a claim against the code.
+> follow it. No gate can check a claim against the code, which is why the writing checklist
+> exists.
 
 > [!edge-case] A gate that checks its own setup
-> Before judging any diagram, `okf-mermaid.mts` renders one trivial diagram, retrying with
-> `--no-sandbox` when the sandbox cannot start. That is how it tells "a bundle full of syntax
-> errors" apart from "this machine cannot run a browser".
+> Before it judges any diagram, `okf-mermaid.mts` renders one trivial diagram, and retries
+> with `--no-sandbox` when the sandbox cannot start. That is how it tells "a bundle full of
+> syntax errors" apart from "this machine cannot run a browser".
 
 ## Quiz
 

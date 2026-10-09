@@ -10,9 +10,10 @@ sources:
   - resource: skills/okf-bootstrap/assets/okf-search.mts
 ---
 
-This tour is for anyone who runs the tools or wonders why the npm scripts load a file before
-the tool. After it, you will know what the two caches are, what each is keyed on, and why
-neither has to decide what to throw away. There is a widget and a [quiz](#quiz) at the end.
+This tour is for anyone who runs the tools, or who has wondered why the npm scripts load a
+file before the tool. By the end you will know what the two caches are, what each is keyed on,
+and why neither ever has to decide what to throw away. There is a widget to play with, and a
+[quiz](#quiz) at the end.
 
 ## Who is affected
 
@@ -25,44 +26,50 @@ neither has to decide what to throw away. There is a widget and a [quiz](#quiz) 
 ## Background
 
 > [!definition] Compile cache
-> Node strips TypeScript from a file before running it. The stripped result is thrown away when
-> the process exits, so the next run strips the same file again. Node's compile cache keeps
-> that stripped code on disk, keyed by the file's content, and reuses it.
+> Node strips the TypeScript from a file before running it. It throws the stripped result away
+> when the process exits, so the next run strips the same file again. Node's compile cache
+> keeps that stripped code on disk, keyed by the file's content, and reuses it.
 
 The tools are TypeScript with no build step: Node 24 runs a `.mts` file directly. That is the
-point of the design, but it has a cost, and for a hook that runs on every file read the cost is
-most of the work. The project's answer is a cache, in two places:
+point of the design, but it has a price. Every start strips the types again, and for a hook
+that runs on every file read, the stripping is most of the work.
+
+The answer is a cache. In fact there are two, of different kinds.
+
+**The compile cache** saves the stripping. It is switched on in two places:
 
 - `okf-start.mjs` is loaded first by every npm script (`node --import ./scripts/okf-start.mjs
-  scripts/okf-search.mts`). It turns the compile cache on under the project's own
+  scripts/okf-search.mts`). It keeps the cache under the project's own
   `node_modules/.cache/okf-compile`, or in a private folder under the temp directory when
   there is no `node_modules` to write to.
-- `hooks/compile-cache.mjs` does the same for the memory hooks, in a private temp folder
-  (`edukai-<uid>`, mode `0700`), because a hook may run where the project cannot be written to.
+- `hooks/compile-cache.mjs` does the same for the memory hooks. It always uses a private temp
+  folder (`edukai-<uid>`, mode `0700`), because a hook may run where the project cannot be
+  written to.
 
-There is a third cache, of a different kind: `okf-search.mts` keeps an inverted index on disk
-so a search does not re-read and re-parse every file.
+**The index cache** saves the reading. `okf-search.mts` keeps an inverted index on disk, so a
+search does not have to read and parse every file again.
 
 ## The problem, one step at a time
 
-1. **A hook starts.** It is plain JavaScript, then imports the TypeScript core. Node strips the
-   core's types. The process exits. The stripped code is gone.
+1. **A hook starts.** Its launcher is plain JavaScript, and it imports the TypeScript core.
+   Node strips the core's types. The process exits, and the stripped code is gone.
 2. **The next read starts it again.** Same file, same stripping, for a hook that is meant to
    cost almost nothing.
-3. **Turn on the compile cache.** The stripped code is written under a private folder and
-   reused on the next start. The tool's behaviour is unchanged; only the start is cheaper.
-4. **The cache can be wrong after an upgrade.** It is keyed by the file's content, so a changed
-   tool is a cache miss and gets stripped again. There is no stale-code path.
-5. **A search is a different problem.** Reading the whole bundle for one query is the expense
-   there, so the index is cached separately, keyed by each file's size, modification time and
-   change time, plus a hash of the code that wrote it.
+3. **Turn on the compile cache.** Now the stripped code is saved in a private folder and
+   reused on the next start. The tool behaves exactly as before; only the start is cheaper.
+4. **An upgrade cannot serve old code.** The cache is keyed by the file's content, so a
+   changed tool is a cache miss and gets stripped again. No path runs stale code.
+5. **A search is a different problem.** There, the cost is reading the whole bundle to answer
+   one query. So the index is cached separately, keyed by each file's size, modification time
+   and change time, plus a hash of the code that wrote it.
 6. **If anything does not match, the file is read again.** A deleted cache costs time, never
    correctness.
 
 ## The picture
 
-Both caches are keyed on identity: the content of the code, or the timestamp of the file. A
-mismatch means "recompute", not "keep the older entry".
+Both caches are keyed on what they were built from: the compile cache on the content of the
+code, the index on each file's size and timestamps. A mismatch means "work it out again",
+never "keep the older entry".
 
 ```mermaid
 flowchart LR
@@ -82,44 +89,48 @@ flowchart LR
     class read,write work
 ```
 
-Try it, in three steps. This widget runs the cache policies a general-purpose cache might use,
-so the contrast is visible: those caches must *choose* a victim, and the choice can be wrong.
+Now try it. The widget below runs the policies a general-purpose cache might use. Those caches
+have limited room, so they must *choose* an entry to throw out, and the choice can be wrong.
+Take it in three steps:
 
 1. **Belady's anomaly.** Click it and read the comparison table. With FIFO, a cache with room
    for four entries does worse than one with room for three on this trace. A cache that throws
    out by age can be hurt by having more room.
-2. **A scan pushes out the hot keys.** Two keys are used constantly, then a one-off scan reads
-   six keys it will never use again. LRU treats each scan key as recent and drops the hot ones.
-   Switch to LFU and the scan only churns itself.
+2. **A scan pushes out the hot keys.** Two keys are used all the time, then a one-off scan
+   reads six keys it will never use again. LRU treats each scan key as recent and drops the
+   hot ones. Switch to LFU, and the scan only churns itself.
 3. **What this project does instead.** Neither of our caches has this problem, because neither
-   chooses a victim. The compile cache is keyed by the content of the file; the index cache is
-   keyed by each file's size and timestamps and the hash of the tool that wrote it. A mismatch
-   is a miss, and a miss recomputes. There is nothing to evict and no wrong answer to keep.
+   chooses what to throw out. The compile cache is keyed by the content of the file. The index
+   cache is keyed by each file's size and timestamps, and by the hash of the tool that wrote
+   it. A mismatch is a miss, and a miss works the answer out again. There is nothing to evict
+   and no wrong answer to keep.
 
 ```widget
 cache-policy
 ```
 
 > [!tip] What to notice
-> The table's two worst cases are both policies that guess which entry is least valuable. Our
-> caches never guess: they only ever answer for an exact key, and any other key is a miss.
+> The two worst cases in the table both come from a policy that guesses which entry matters
+> least. Our caches never guess. They answer only for an exact key, and any other key is a
+> miss.
 
 ## Details
 
 > [!important] A cache is an optimisation, never a source of truth
-> Delete `node_modules/.cache/` and everything still works; it is only slower. That is why a
-> read-only checkout, or a machine where the temp folder cannot be made private, simply runs
-> without a cache instead of failing.
+> Delete `node_modules/.cache/` and everything still works, only slower. For the same reason,
+> a read-only checkout, or a machine where the temp folder cannot be made private, does not
+> fail. It simply runs without a cache.
 
 > [!warning] Do not cache what can be planted
-> A cache holds code Node will run, so it lives somewhere private: under the project's own
-> `node_modules`, or in a folder owned by the user with no group or world access. A shared
-> temp folder is not used.
+> A cache holds code that Node will run, so it must live somewhere private: under the
+> project's own `node_modules`, or in a folder owned by the user with no group or world
+> access. A shared temp folder is never used.
 
 > [!edge-case] A file written as the cache is written
-> Version control tools avoid the "racily clean" case, where a file's timestamp is so close to
-> the cache's that the two cannot be ordered. `okf-search.mts` applies the same rule: a file
-> modified close to when the cache was written is read again rather than trusted.
+> When a file changes at almost the same moment the cache is written, their timestamps are
+> too close to say which came first. Version control tools call this the "racily clean" case.
+> `okf-search.mts` applies their rule: a file modified close to when the cache was written is
+> read again, not trusted.
 
 ## Quiz
 

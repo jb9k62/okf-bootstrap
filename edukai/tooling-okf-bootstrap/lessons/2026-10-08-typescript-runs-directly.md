@@ -19,15 +19,17 @@ check:
   - { file: package.json, matches: '"node": ">=24"' }
 ---
 
-Every tool under `skills/okf-bootstrap/assets/` is TypeScript that Node runs directly by type
-stripping: there is no build step, and a target project's `package.json` `"type"` is never
-changed. `tsconfig.json` sets `erasableSyntaxOnly`, so only syntax Node can strip is allowed
-(no enums, namespaces or parameter properties), and imports name the real `.mts` extension.
-`package.json` declares Node `>=24`; 22.18+ also runs the tools.
+Every tool under `skills/okf-bootstrap/assets/` is TypeScript that Node runs as it is. Node
+strips the types and runs what is left, so there is no build step, and a target project's
+`package.json` `"type"` is never changed. The price is a smaller language: Node can only
+strip syntax it can delete without changing what runs. `tsconfig.json` sets
+`erasableSyntaxOnly` to hold that line, so enums, namespaces and parameter properties are
+out, and every import names the real `.mts` extension. `package.json` declares Node `>=24`;
+22.18+ also runs the tools.
 
 ## Caveats
 
 - The check proves the flag is set, not that every file obeys it. `npm run typecheck` proves
   that.
-- `.mts` is always ESM, whatever the nearest `package.json` says. A plain `.ts` file would not
-  have that guarantee.
+- A `.mts` file is always an ES module, whatever the nearest `package.json` says. A plain
+  `.ts` file would not have that guarantee.

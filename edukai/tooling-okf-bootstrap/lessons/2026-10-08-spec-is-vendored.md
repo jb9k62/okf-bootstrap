@@ -17,13 +17,14 @@ check:
   - { file: skills/okf-bootstrap/references/okf-spec/UPSTREAM.json, exists: true }
 ---
 
-The OKF spec is tracked two ways: `vendor/knowledge-catalog` is a shallow git submodule pinned
-to an upstream commit, and `skills/okf-bootstrap/references/okf-spec/` holds `SPEC.md` and
-`LICENSE.md` copied from it, with `UPSTREAM.json` recording the commit and version. Never
-hand-edit either path. `npm run spec -- status` compares the pin with upstream (exit 1 when
-`SPEC.md` moved), and `npm run spec -- update` moves the submodule and re-vendors. CI runs
-`spec status` weekly, so a moved upstream shows up on its own.
+The OKF spec lives here in two forms, and neither is edited by hand.
+`vendor/knowledge-catalog` is a shallow git submodule pinned to an upstream commit.
+`skills/okf-bootstrap/references/okf-spec/` holds `SPEC.md` and `LICENSE.md` copied from it,
+with `UPSTREAM.json` recording the commit and version. Let the script do both jobs.
+`npm run spec -- status` compares the pin with upstream and exits 1 when `SPEC.md` has moved.
+`npm run spec -- update` moves the submodule and copies the files in again. CI runs
+`spec status` weekly, so an upstream change shows up without anyone looking for it.
 
 ## Caveats
 
-- `status` exits 2 when it cannot reach upstream. That is "unproven", not "current".
+- `status` exits 2 when it cannot reach upstream. That means "unproven", not "current".

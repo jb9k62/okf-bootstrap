@@ -14,10 +14,10 @@ sources:
 
 # Agent memory
 
-`edukai/` is the second bundle: what agents have learned about a project, kept so the next
-session starts knowing it. It is written by agents for agents, and it is kept apart from the
-design bundle ([ADR-0002](/adr/0002-two-bundles-design-and-memory.md)). The rules for writing
-one live in the `edukai` skill; this concept is about the machinery.
+`edukai/` is the second bundle. It holds what agents have learned about a project, so the
+next session starts knowing it. Agents write it for agents, and it is kept apart from the
+design bundle ([ADR-0002](/adr/0002-two-bundles-design-and-memory.md)). The rules for
+writing a lesson live in the `edukai` skill. This concept explains the machinery.
 
 ## Layout and a lesson
 
@@ -25,29 +25,32 @@ one live in the `edukai` skill; this concept is about the machinery.
 edukai/
 ├── index.md                  the syllabus; one generated block (npm run edukai:index)
 ├── log.md                    dated update history
-└── <domain>/                 codebase-…, tooling-… or user-, lowercase-hyphen
+└── <domain>/                 codebase-…, tooling-… or user-…, lowercase-hyphen
     ├── overview.md           type: Overview; teaches the domain in two to five paragraphs
     └── lessons/
         └── YYYY-MM-DD-short-claim.md   type: Lesson; one claim
 ```
 
-A lesson is one claim, as a sentence, with the files it rests on. `okf-edukai.mts new` writes
-the file; a person or an agent fills the body; `verify` runs the checks, pins a digest of every
-file source, and records who verified it and when it goes stale.
+A lesson is one claim, written as a sentence, with the files it rests on. It is made in three
+steps. `okf-edukai.mts new` writes the file. A person or an agent fills in the body. Then
+`verify` runs the checks, pins a digest of every file source, and records who verified the
+lesson and when it goes stale.
 
-- **`sources`** are paths from the project root, or bundle-root paths, or URLs. `verify` stores
-  a content digest beside each file source.
-- **`check`** is what lets a lesson survive an unrelated edit to a file it cites. Each entry
-  has a `file` and exactly one of `contains`, `lacks` (literal text), `matches` (a JavaScript
+Three fields carry the weight:
+
+- **`sources`** names what the claim rests on: paths from the project root, bundle-root paths,
+  or URLs. `verify` stores a content digest beside each file source.
+- **`check`** lets a lesson survive an unrelated edit to a file it cites. Each entry has a
+  `file` and exactly one of `contains`, `lacks` (literal text), `matches` (a JavaScript
   regular expression, at most 200 characters, given 200 ms) or `exists` (`true` or `false`).
   There are no shell commands.
-- **`confidence`** is `tested` (reproduced it), `observed` (saw or read it) or `inferred`
-  (deduced it). A lesson with no `verify` stays `inferred`.
+- **`confidence`** says how the author knows: `tested` (reproduced it), `observed` (saw or
+  read it) or `inferred` (deduced it). A lesson with no `verify` stays `inferred`.
 
 ## What a lesson's state means
 
-`recheck` derives one state per lesson from the digests and the checks. Only the first four
-need an agent.
+`recheck` works out one state for each lesson from its digests and checks. Only the first
+four need an agent.
 
 | State | Means | What to do |
 | --- | --- | --- |
@@ -59,13 +62,14 @@ need an agent.
 | `unverified` | `confidence: inferred`, never verified | leave it until it matters |
 | `fresh` | nothing to do | nothing |
 
-A claim that is no longer true is **superseded**, never edited to match and never deleted: the
-new lesson gets `supersedes: /old.md`, the old one `status: deprecated` and `superseded_by:
-/new.md`. The history of what was believed is part of the memory.
+When a claim stops being true, it is **superseded**. It is never edited to match, and never
+deleted. The new lesson gets `supersedes: /old.md`, and the old one gets `status: deprecated`
+and `superseded_by: /new.md`. The history of what was believed is part of the memory.
 
 ## The hooks
 
-Three moments matter, and both harnesses implement the same three from the same core file:
+A lesson is only useful if it arrives at the right time. Three moments matter, and both
+harnesses handle the same three from the same core file:
 
 | Moment | Command | What it says |
 | --- | --- | --- |
@@ -74,18 +78,19 @@ Three moments matter, and both harnesses implement the same three from the same 
 | the agent is about to finish having broken a lesson | `debt` | the lesson its own change left wrong. Named once per session, so it cannot loop |
 
 `hooks/hooks.json` wires the Claude Code plugin: SessionStart, PostToolUse on `Read` and on
-`Edit|Write|NotebookEdit`, and Stop. `extensions/edukai.ts` is the pi adapter for
+`Edit|Write|NotebookEdit`, and Stop. `extensions/edukai.ts` is the pi adapter, for
 `session_start`/`session_compact`, `tool_result` and `agent_end`. Both resolve
 `assets/okf-edukai-hook.mts` from this repository, run it with a five-second timeout, and stay
-silent on any error. In a project with no `edukai/index.md` the hooks do nothing.
+silent on any error. In a project with no `edukai/index.md`, the hooks do nothing.
 
-The core file must stay dependency-free because it runs from an installed plugin where the
-project's `node_modules` may not exist: it imports only `node:` built-ins and `./okf-rank.mts`
+The core file must stay dependency-free, because it runs from an installed plugin where the
+project's `node_modules` may not exist. It imports only `node:` built-ins and `./okf-rank.mts`
 ([the tools](/okf-bootstrap/tools.md)).
 
 ## Where it is exercised
 
 `examples/demo/edukai/` is a full memory bundle whose lessons pin real files under
 `examples/demo/`. Three of those files were changed on purpose after the lessons were written,
-so the re-check always has something to find. `npm run demo:edukai` runs the brief and the
-re-check against a fixed clock, and `examples/demo/README.md` walks through it.
+so the re-check always has something to find. To see it work, run `npm run demo:edukai`: it
+prints the brief and the re-check against a fixed clock. `examples/demo/README.md` walks
+through the output.

@@ -18,37 +18,42 @@ sources:
 
 ## Context
 
-A project's bundle is a folder of markdown; the viewer turns it into one `viz.html` that
-someone can open without installing anything. The parts it needs are a graph library
-(Cytoscape), a markdown renderer (marked), Mermaid for diagrams, a syntax highlighter, the
-ranking that powers its search box, and any React widgets the project wrote.
+A project's bundle is a folder of markdown. The viewer turns it into one `viz.html` that
+anyone can open without installing anything. To do that, the page needs six things: a graph
+library (Cytoscape), a markdown renderer (marked), Mermaid for diagrams, a syntax
+highlighter, the ranking behind its search box, and any React widgets the project wrote.
 
-Shipping that as an application with a build would mean every project needs a build step
-before it can read its own docs, which is the opposite of what the skill promises.
+The usual way to ship all that is an application with a build. But then every project would
+need a build step before it could read its own docs, which is the opposite of what the skill
+promises.
 
 ## Decision
 
-We will keep `viz.html` a single generated file with no build step. The ranking
-(`okf-rank.mts`) and the project's built widget bundle are inlined into the page; Cytoscape,
-marked, Mermaid and highlight.js load from a CDN, each pinned to an exact version with a
-subresource-integrity hash so a changed file does not run. No bundler and no runtime network
-fetch are added to the viewer itself.
+We will keep `viz.html` a single generated file with no build step. Its parts reach the page
+in two ways:
+
+- **Inlined:** the ranking (`okf-rank.mts`) and the project's built widget bundle.
+- **Loaded from a CDN:** Cytoscape, marked, Mermaid and highlight.js, each pinned to an exact
+  version with a subresource-integrity hash, so a changed file does not run.
+
+The viewer gets no bundler, and no network fetch beyond those four script tags.
 
 ## Consequences
 
 ### Positive
 
-- A project reads its docs by opening one file; nothing to install, nothing to serve.
-- `okf-rank.mts` is inlined with its types stripped, so the viewer's search box and
-  `okf-search` run the same ranking from one source. That is why the file must stay pure, with
-  no imports ([the tools](/okf-bootstrap/tools.md)).
-- Pinned integrity hashes make a CDN compromise a load failure rather than a silent change.
+- A project reads its docs by opening one file. There is nothing to install and nothing to
+  serve.
+- The search box and `okf-search` run the same ranking from one source, because
+  `okf-rank.mts` is inlined with its types stripped. That is why the file must stay pure,
+  with no imports ([the tools](/okf-bootstrap/tools.md)).
+- The integrity hashes turn a compromised CDN into a load failure, not a silent change.
 
 ### Trade-offs
 
-- Diagrams need network access for Mermaid, so the render gate cannot run air-gapped; the
-  parse gate can. Exit code 2 means "could not run", never "passed".
-- The widget bundle has to be built before the viewer inlines it, so `okf:view` and
+- The page needs the network to load its libraries, so the render gate cannot run
+  air-gapped. The parse gate can. Exit code 2 means "could not run", never "passed".
+- The widget bundle has to be built before the viewer can inline it, so `okf:view` and
   `okf:mermaid:render` build the workspace first.
 - The page is large, because it carries the ranking and the widgets.
 
@@ -56,6 +61,6 @@ fetch are added to the viewer itself.
 
 | Option | Why rejected |
 |---|---|
-| A bundler (Vite/Rollup) for the viewer | Adds a build step to every project that wants to read its own docs, and a toolchain to keep working |
-| Vendor the libraries into the page | Much larger output, and every library upgrade becomes a change to this repository rather than a pinned version |
+| A bundler (Vite/Rollup) for the viewer | It adds a build step to every project that wants to read its own docs, and a toolchain to keep working |
+| Vendor the libraries into the page | The output would be much larger, and every library upgrade would become a change to this repository instead of a pinned version |
 | A small server that renders on demand | The bundle is meant to be shareable as one file, including from a checkout with no runtime |

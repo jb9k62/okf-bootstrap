@@ -13,7 +13,7 @@ knowing it. This is the **memory bundle**. The design bundle, written for the te
 One line per domain, written by `npm run edukai:index`. Do not edit between the markers.
 
 <!-- edukai:index -->
-* [The okf-bootstrap codebase](/codebase-okf-bootstrap/overview.md) - The invariants the tools and adapters must keep, and why each one is load-bearing
+* [The okf-bootstrap codebase](/codebase-okf-bootstrap/overview.md) - What each tool and adapter must never do, and why
 * [Working in the okf-bootstrap repository](/tooling-okf-bootstrap/overview.md) - How to build, test and release the skill, and the traps that are easy to miss
 <!-- /edukai:index -->
 

@@ -15,10 +15,11 @@ sources:
 
 okf-bootstrap is two agent skills, for [pi](https://pi.dev) and
 [Claude Code](https://claude.com/claude-code), that set up and maintain knowledge bundles in
-another project. It is not an application and has no runtime of its own: what ships is
-markdown that tells an agent what to do, and a set of tools it runs in the target project.
+another project. It is not an application and has no runtime of its own. What ships is
+markdown that tells an agent what to do, and a set of tools the agent runs in the target
+project.
 
-The two bundles have different readers, so they are kept apart
+There are two bundles because there are two readers
 ([ADR-0002](/adr/0002-two-bundles-design-and-memory.md)):
 
 | Bundle | Reader | Unit | Written when |
@@ -36,21 +37,23 @@ The two bundles have different readers, so they are kept apart
 | `hooks/`, `extensions/` | The harness adapters: Claude Code hooks and a pi extension that read the memory bundle at the moments it matters |
 | `scripts/` | Maintainer tools only: install the skill, refresh the vendored spec, regenerate screenshots |
 | `test/` | Unit tests and Chromium end-to-end tests |
-| `examples/demo/` | A fictional service documented with both bundles; the reference for a scaffolded project |
+| `examples/demo/` | A made-up service documented with both bundles; the reference for a scaffolded project |
 | `vendor/knowledge-catalog` | A git submodule pinning the upstream spec commit |
 
 ## What it leaves out
 
+Each of these is a choice, not a gap.
+
 - **No service and no library.** The tools are copied into the target project as
   `scripts/okf-*.mts` and run there. They read the project's own files and write `viz.html`
-  next to the bundle; nothing calls home.
+  next to the bundle. Nothing calls home.
 - **No build step.** The tools are TypeScript that Node runs directly, so a project needs no
   compiler, and its `package.json` `"type"` is never changed. See
   [the tools](/okf-bootstrap/tools.md).
-- **No hosted viewer.** `viz.html` is one self-contained file; its libraries come from a
+- **No hosted viewer.** `viz.html` is one self-contained file, and its libraries come from a
   pinned CDN ([ADR-0004](/adr/0004-viz-html-stays-one-file.md)).
-- **No automatic writing.** The scaffold creates the skeleton and the gates; a person or an
-  agent writes the concepts. The skill's rule is that no claim goes in until it has been
+- **No automatic writing.** The scaffold creates the skeleton and the gates. A person or an
+  agent writes the concepts, and the skill's rule is that no claim goes in until it has been
   checked against the code.
 
 ## Reading on

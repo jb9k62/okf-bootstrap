@@ -19,38 +19,42 @@ sources:
 ## Context
 
 okf-bootstrap ships a skill that scaffolds an OKF bundle into other projects, and a demo
-bundle that shows what one looks like. It had no bundle of its own: the repository's design
-knowledge lived in `README.md`, `AGENTS.md` and `CHANGELOG.md`, and the reasoning behind the
-tools existed only in the code, the tests and the git history.
+bundle that shows what one looks like. It had no bundle of its own. What the repository knew
+about its own design was spread across `README.md`, `AGENTS.md` and `CHANGELOG.md`, and the
+reasons behind the tools lived only in the code, the tests and the git history.
 
-That is the situation the skill exists to fix. The tools are large (the viewer alone is over
-four thousand lines), agents write most of the changes, and a person arriving at the
-repository has to reconstruct why the pieces are shaped the way they are. Shipping a
-documentation tool and not using it is also the weakest possible test of it: the demo proves
-the format renders, not that it is worth writing.
+That is the very problem the skill exists to fix. The tools are large (the viewer alone is
+over four thousand lines), and agents write most of the changes. Someone new to the
+repository has to work out for themselves why each piece has the shape it has.
+
+There is a second problem. A documentation tool that its own authors do not use has barely
+been tested. The demo proves the format renders. It does not prove the format is worth
+writing in.
 
 ## Decision
 
-We will keep this repository's design knowledge in an `okf/` bundle at the repository root,
-validated and rendered by the same tools the skill scaffolds, and we will record the choices
-behind the tooling here rather than only in commit messages.
+We will keep this repository's design knowledge in an `okf/` bundle at the repository root.
+The same tools the skill scaffolds will validate and render it. The choices behind the
+tooling will be recorded here, and not only in commit messages.
 
 ## Consequences
 
 ### Positive
 
-- The skill is exercised on a real, non-fictional bundle that changes with the code, so a
-  defect in the format or the validator shows up here first.
-- The bundle's claims are checked against the code by the same writing checklist the skill
-  gives other projects, including the rule that no claim goes in unchecked.
-- `npm run okf:validate` and the memory re-check run in this repository's CI, so the bundle
-  cannot rot silently.
+- The skill is used on a real bundle that changes with the code, so a defect in the format or
+  the validator shows up here first.
+- The bundle is written to the same checklist the skill gives other projects, including its
+  first rule: no claim goes in until it has been checked against the code.
+- `npm run check` validates both bundles, and CI runs it. A broken link or a missing `type`
+  fails the build, so the bundle's shape cannot rot unnoticed.
 
 ### Trade-offs
 
-- The bundle is another thing to keep current when the tools change, and a stale concept is
-  worse than none. The `okf:recheck` gate is what keeps that honest.
-- The repository's own commands differ from a scaffolded project's: the tools run from
+- The bundle is one more thing to keep current when the tools change, and a stale concept is
+  worse than none. Validation checks a concept's shape, not whether it is still true.
+  `npm run okf:recheck` can report a concept whose pinned sources have changed, but no concept
+  here is pinned yet. Until one is, catching a stale concept is a reviewer's job.
+- The commands here differ from a scaffolded project's. The tools run from
   `skills/okf-bootstrap/assets/`, not from copies under `scripts/`
   ([ADR-0003](/adr/0003-run-the-tools-from-the-skill-assets.md)).
 
@@ -58,6 +62,6 @@ behind the tooling here rather than only in commit messages.
 
 | Option | Why rejected |
 |---|---|
-| Leave documentation in README and AGENTS.md | Those files are instructions and a summary; neither is a place for the reasoning behind a decision, and neither is checked for broken links or stale claims |
-| A wiki or a docs site | Separated from the code and from review, so it drifts; the skill's own guidance is that design docs live next to the code and are reviewed like code |
-| Documentation inside the demo bundle | The demo is fictional and its claims are pinned by tests; mixing the real repository into it would blur both |
+| Leave documentation in README and AGENTS.md | Those files hold instructions and a summary. Neither is a place for the reasoning behind a decision, and neither is checked for broken links or stale claims |
+| A wiki or a docs site | It sits apart from the code and from review, so it drifts. The skill's own advice is that design docs live next to the code and are reviewed like code |
+| Documentation inside the demo bundle | The demo is made up, and tests pin its claims. Mixing the real repository into it would blur both |

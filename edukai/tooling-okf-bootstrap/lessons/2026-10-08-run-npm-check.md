@@ -16,14 +16,14 @@ check:
   - { file: package.json, contains: "npm run test:views && npm run okf:validate && npm run edukai:validate" }
 ---
 
-`npm run check` is the gate to run before finishing. It runs `npm run typecheck` (the tools and
-the widget workspace), `npm test` (`node --test test/*.test.mts` plus the widget workspace's
-tests), `npm run test:views` (the Chromium view tests), then validates this repository's own
-`okf/` and `edukai/` bundles with `okf:validate` and `edukai:validate`.
+Run `npm run check` before you call a change finished. It is one command that chains the
+rest, in this order: `npm run typecheck` (the tools and the widget workspace), `npm test`
+(`node --test test/*.test.mts`, plus the widget workspace's tests), `npm run test:views` (the
+Chromium view tests), then `okf:validate` and `edukai:validate` on this repository's own
+`okf/` and `edukai/` bundles.
 
 ## Caveats
 
-- The browser tests skip without Chromium, so a green `check` does not prove the views render.
+- Green does not prove the views render: the browser tests skip when there is no Chromium.
   Install Playwright's Chromium, or set `OKF_CHROMIUM`, to make them run.
-- CI runs `check` on Node 24 and 26. Locally Node 22.18+ also runs the tools, which is what this
-  checkout uses.
+- CI runs `check` on Node 24 and 26. Node 22.18+ also runs the tools locally.

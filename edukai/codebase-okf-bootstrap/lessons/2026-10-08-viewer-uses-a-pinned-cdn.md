@@ -18,15 +18,17 @@ check:
   - { file: skills/okf-bootstrap/assets/okf-view.mts, contains: 'integrity="sha384-' }
 ---
 
-`viz.html` loads Cytoscape, marked, Mermaid and highlight.js from jsdelivr and cdnjs, each
-pinned to an exact version and carrying a subresource-integrity hash, so a changed CDN file
-does not run. That is why the render gate needs network access and exits 2 without it. The
-ranking and the widget bundle are inlined instead, so the page stays one file with no build
+`viz.html` does not carry its big libraries. Cytoscape, marked, Mermaid and highlight.js load
+from jsdelivr and cdnjs when the page opens. Each URL names an exact version and carries a
+subresource-integrity hash, so a CDN file that has changed does not run. This is why the
+render gate needs network access, and why it exits 2 without it. The ranking and the widget
+bundle are handled differently: they are inlined, so the page stays one file with no build
 step.
 
 ## Caveats
 
-- Bumping a library means updating the URL, the integrity hash and the devDependency together.
-  `test/views.e2e.mts` serves the pinned versions from `node_modules` when they are installed
-  and fails on a drift between the two.
-- The parse gate can run offline; the render gate cannot. Exit 2 is "unproven", not a pass.
+- To bump a library, change three things together: the URL, the integrity hash and the
+  devDependency. `test/views.e2e.mts` serves the pinned versions from `node_modules` when
+  they are installed, and fails when the two drift apart.
+- The parse gate runs offline; the render gate cannot. Read exit 2 as "unproven", never as a
+  pass.

@@ -17,13 +17,13 @@ check:
   - { file: test/render.e2e.mts, contains: "the demo has no tour using widget" }
 ---
 
-`test/render.e2e.mts` reads the widget registry in
-`templates/okf-widgets/src/index.tsx` and fails if any registered widget is missing from a tour
-in `examples/demo/okf`. It also counts the demo's ` ```widget ` blocks against the render
-gate's report, so the gate cannot silently skip a widget. Adding a widget to the registry means
-adding a demo tour that uses it.
+A widget is not finished until a tour in the demo bundle uses it. `test/render.e2e.mts` reads
+the widget registry in `templates/okf-widgets/src/index.tsx` and fails when a registered
+widget appears in no tour under `examples/demo/okf`. The same test counts the demo's
+` ```widget ` blocks against the render gate's report, so the gate cannot quietly skip one.
+When you register a widget, add a demo tour that uses it in the same change.
 
 ## Caveats
 
-- The rule is about the demo bundle. This repository's own `okf/` tours may use a subset of the
-  registered widgets.
+- The rule covers the demo bundle only. This repository's own `okf/` tours may use just some
+  of the registered widgets.

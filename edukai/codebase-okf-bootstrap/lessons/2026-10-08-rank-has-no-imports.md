@@ -15,14 +15,15 @@ check:
   - { file: skills/okf-bootstrap/assets/okf-rank.mts, lacks: "import " }
 ---
 
-`okf-rank.mts` imports nothing, and touches no `fs`, `path`, `process` or DOM. That is what
-lets `okf-view.mts` read it, strip its types with Node's `stripTypeScriptTypes`, remove its
-`export ` prefixes and inline it into `viz.html` as a plain script, so one ranking serves both
-`okf-search` and the viewer's search box.
+`okf-rank.mts` imports nothing, and it never touches `fs`, `path`, `process` or the DOM. Keep
+it that way, because the file runs in two places. `okf-search` loads it as a module in Node.
+`okf-view.mts` reads the same file, strips its types with Node's `stripTypeScriptTypes`,
+removes each `export ` prefix and inlines the result into `viz.html` as a plain script. One
+ranking then serves both the command line and the viewer's search box.
 
 ## Caveats
 
-- "No imports" is not "no dependencies": it uses only language built-ins, which is exactly why
-  both a Node module and a browser script can run it.
-- A comment in the file mentions imports, so a check for the word alone would be wrong. The
-  check looks for `import ` with a trailing space, which only a real import statement has.
+- "No imports" is not "no dependencies". The file uses only language built-ins, and that is
+  exactly why a Node module and a browser script can both run it.
+- The check looks for `import ` with a trailing space, which only a real import statement
+  has. A comment in the file mentions imports, so a check for the word alone would be wrong.

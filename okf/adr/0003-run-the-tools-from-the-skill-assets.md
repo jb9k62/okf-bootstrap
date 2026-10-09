@@ -19,16 +19,16 @@ sources:
 ## Context
 
 In a scaffolded project, `bootstrap.mts` copies the tools to `scripts/okf-*.mts`, writes
-`scripts/.okf-bootstrap.json`, and adds `okf:` npm scripts that run those copies.
-`npm run okf:update` then compares the manifest against a release and refreshes them. The
+`scripts/.okf-bootstrap.json`, and adds `okf:` npm scripts that run those copies. Later,
+`npm run okf:update` compares the manifest against a release and refreshes them. There, the
 copies are the product: a project that is not this repository has no other way to get the
 tools.
 
-This repository is the source of those files. It already keeps maintainer tools in `scripts/`
-(`install-skill.mts`, `okf-spec.mts`, `screenshots.mts`), and its `npm run demo` already runs
-the tools straight from `skills/okf-bootstrap/assets/`. Copying the tools in as well would
-put a second copy of roughly ten thousand lines in the tree, refreshed from the originals on
-every release.
+This repository is different, because it is where those files come from. It already keeps
+its maintainer tools in `scripts/` (`install-skill.mts`, `okf-spec.mts`, `screenshots.mts`),
+and `npm run demo` already runs the tools straight from `skills/okf-bootstrap/assets/`.
+Scaffolding into this repository would add a second copy of roughly nine thousand lines, to
+be refreshed from the originals on every release.
 
 ## Decision
 
@@ -40,26 +40,26 @@ repository gets no `scripts/okf-*.mts` copies, no `.okf-bootstrap.json` and no `
 
 ### Positive
 
-- One copy of every tool: a change to `okf-view.mts` cannot leave a stale duplicate behind, and
-  `npm run typecheck` checks the real file once.
-- The repository's `scripts/` keeps a single, clear meaning, as AGENTS.md describes it.
-- The self-hosted bundle is validated by exactly the code under review, which is the strongest
-  form of dogfooding available here.
+- There is one copy of every tool. A change to `okf-view.mts` cannot leave a stale duplicate
+  behind, and `npm run typecheck` checks the real file once.
+- `scripts/` keeps one clear meaning, the one AGENTS.md gives it: maintainer tools.
+- The bundle here is validated by exactly the code under review. That is the strongest form
+  of dogfooding available.
 
 ### Trade-offs
 
-- This repository never exercises the copy-and-refresh path (`bootstrap.mts` writing
-  `scripts/`, `okf:update` applying a release) on itself. The tests cover it in throwaway
+- This repository never runs the copy-and-refresh path on itself (`bootstrap.mts` writing
+  `scripts/`, `okf:update` applying a release). The tests cover that path in throwaway
   projects instead.
-- The npm scripts name a path a scaffolded project does not have, so a reader comparing the
-  two sees a difference that has to be explained, which is this record's job.
-- If a tool is ever renamed or moved under `assets/`, the scripts here break at once; that is
-  the intended early warning.
+- The npm scripts name a path a scaffolded project does not have. Anyone comparing the two
+  will see the difference and need it explained, which is this record's job.
+- If a tool is ever renamed or moved under `assets/`, the scripts here break at once. That is
+  the early warning we want.
 
 ## Alternatives considered
 
 | Option | Why rejected |
 |---|---|
-| Full scaffold: copies in `scripts/` plus the manifest | Duplicates the tools and needs a refresh commit on every release; the copies would be the same files under a second name |
-| Symlink `scripts/okf-*.mts` to the assets | Fragile across checkouts and platforms, and the manifest's hashes would describe a link rather than the content |
-| A build step that generates the copies | Adds the build step the project deliberately does not have |
+| Full scaffold: copies in `scripts/` plus the manifest | It duplicates the tools and needs a refresh commit on every release. The copies would be the same files under a second name |
+| Symlink `scripts/okf-*.mts` to the assets | Symlinks are fragile across checkouts and platforms, and the manifest's hashes would describe a link, not the content |
+| A build step that generates the copies | It adds the build step this project has chosen not to have |

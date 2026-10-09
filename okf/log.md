@@ -8,3 +8,9 @@
   ([ADR-0003](/adr/0003-run-the-tools-from-the-skill-assets.md)).
 * **Memory bundle**: added `edukai/` beside this bundle, with the first lessons about the
   repository ([ADR-0002](/adr/0002-two-bundles-design-and-memory.md)).
+* **Copy-edit**: rewrote the prose of the concepts, decision records and tours to be plainer
+  and to teach as they go. Diagrams, quizzes and frontmatter are unchanged. Corrected four
+  claims on the way: `okf:recheck` has nothing to report until a concept is pinned (ADR-0001),
+  CI validates the bundles but does not run the memory re-check (ADR-0001), `npm run check`
+  includes the Chromium view tests, and tests compare the version in all four places
+  ([testing and CI](/okf-bootstrap/testing.md)).

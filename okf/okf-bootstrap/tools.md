@@ -20,10 +20,10 @@ sources:
 
 # The tools
 
-Everything under `skills/okf-bootstrap/assets/` is TypeScript that Node 24 runs directly (type
-stripping), except `okf-start.mjs`, which is plain JavaScript because it has to load before
-anything can be stripped. A scaffold copies nine of these files into a project's `scripts/`
-and records their hashes in `scripts/.okf-bootstrap.json`.
+Everything under `skills/okf-bootstrap/assets/` is TypeScript that Node 24 runs directly, by
+stripping the types. The one exception is `okf-start.mjs`: it is plain JavaScript, because it
+has to load before anything can be stripped. A scaffold copies nine of these files into a
+project's `scripts/` and records their hashes in `scripts/.okf-bootstrap.json`.
 
 | File | What it does |
 | --- | --- |
@@ -40,32 +40,33 @@ and records their hashes in `scripts/.okf-bootstrap.json`.
 
 ## The rules each must keep
 
-These are not style preferences; each one is load-bearing, and the test suite enforces the
-first two.
+These are not matters of style. Each rule exists because breaking it breaks something a user
+depends on, and the test suite enforces the first two.
 
 - **`okf-rank.mts` stays pure.** No imports, and nothing that touches `fs`, `path`, `process`
   or the DOM. The viewer inlines it into the page with its types stripped, so one ranking
   serves the CLI and the search box. An import here would either break the page or force a
-  bundler ([ADR-0004](/adr/0004-viz-html-stays-one-file.md)).
+  bundler on it ([ADR-0004](/adr/0004-viz-html-stays-one-file.md)).
 - **`okf-edukai-hook.mts` stays dependency-free.** It imports only `node:` built-ins and
-  `./okf-rank.mts`, never `okf-core.mts` or `yaml`, and never runs code from the project. It
-  runs from an installed plugin where the project's `node_modules` may not exist, and its
+  `./okf-rank.mts`, never `okf-core.mts` or `yaml`, and it never runs code from the project.
+  It runs from an installed plugin where the project's `node_modules` may not exist, and its
   output is put in front of an agent. A test runs it outside the repository to prove it.
 - **Tools stay dependency-light.** Nothing under `assets/` imports from outside `assets/`, and
-  templates are resolved relative to the tool's own file, so a copy in a project's `scripts/`
-  works the same as the original.
+  templates are resolved relative to the tool's own file. That way a copy in a project's
+  `scripts/` works the same as the original.
 - **Erasable TypeScript only.** No enums, namespaces or parameter properties, and imports name
-  the real `.mts` extension. `tsconfig.json` sets `erasableSyntaxOnly`, and the tools run with
-  no build step.
-- **`okf-start.mjs` stays plain.** No TypeScript and no imports beyond `node:` built-ins: a
+  the real `.mts` extension. `tsconfig.json` sets `erasableSyntaxOnly`, which is what lets
+  the tools run with no build step.
+- **`okf-start.mjs` stays plain.** No TypeScript, and no imports beyond `node:` built-ins. A
   tool must still run without it, only slower.
 - **Exit codes are the contract.** Every gate returns 0 (pass), 1 (broken, named by file) or
-  2 (could not run). Never 0 when the check did not run; see
+  2 (could not run). It never returns 0 when the check did not run; see
   [quality gates](/okf-bootstrap/gates.md).
 
 ## Why generated copies
 
-A project receives copies rather than a dependency, so it can read and change them, and so the
-tools keep working when this repository is not installed. `okf-update.mts` reads the manifest
-to tell a generated file from one the project edited. This repository itself runs the tools
-where they live instead ([ADR-0003](/adr/0003-run-the-tools-from-the-skill-assets.md)).
+A project receives copies of the tools, not a dependency. It can read them and change them,
+and they keep working when this repository is not installed. `okf-update.mts` reads the
+manifest to tell a generated file from one the project has edited. This repository is the
+one exception: it runs the tools where they live
+([ADR-0003](/adr/0003-run-the-tools-from-the-skill-assets.md)).
